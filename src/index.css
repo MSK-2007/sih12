@@ -1,0 +1,227 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Global Kinetic Orange Selection ──────────────────────────────────────── */
+::selection {
+  background: #000000;
+  color: #FF4D00;
+}
+
+body {
+  background-color: #090d16;
+  color: #f1f5f9;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Custom scrollbar for control room panels */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #090d16;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #1e293b;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #334155;
+}
+
+/* Pulse animation for critical alerts */
+@keyframes critical-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 10px rgba(239, 68, 68, 0);
+  }
+}
+
+.pulse-critical {
+  animation: critical-pulse 2s infinite;
+}
+
+/* Kinetic Brutalist Card Panel Styling */
+.glass-panel {
+  background: #0d0d0d;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+}
+
+.brutalist-border {
+  border: 2px solid #000000;
+}
+
+.brutalist-border-orange {
+  border: 2px solid #FF4D00;
+}
+
+.brutalist-border-white {
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+/* ───────────────────────────────────────────────────────────────────────────
+   KINETIC ORANGE BRUTALIST SYSTEM
+   ─────────────────────────────────────────────────────────────────────────── */
+
+.font-archivo {
+  font-family: 'Archivo Black', sans-serif;
+}
+
+.font-space {
+  font-family: 'Space Mono', monospace;
+}
+
+.font-inter {
+  font-family: 'Inter', sans-serif;
+}
+
+/* Selection Color: background #000000, text #FF4D00 */
+.kinetic-theme ::selection {
+  background: #000000 !important;
+  color: #FF4D00 !important;
+}
+
+/* Linear Infinite Marquee Animations */
+@keyframes marquee-left {
+  0% { transform: translateX(0%); }
+  100% { transform: translateX(-50%); }
+}
+
+@keyframes marquee-right {
+  0% { transform: translateX(-50%); }
+  100% { transform: translateX(0%); }
+}
+
+.animate-marquee-left {
+  display: flex;
+  width: 200%;
+  animation: marquee-left 18s linear infinite;
+}
+
+.animate-marquee-right {
+  display: flex;
+  width: 200%;
+  animation: marquee-right 18s linear infinite;
+}
+
+/* Rotating Scroll Down Circle (12s linear rotation) */
+@keyframes spin-linear {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.animate-spin-slow {
+  animation: spin-linear 12s linear infinite;
+}
+
+/* Fade-in entrance animation */
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* ── Kinetic hover utilities (inline Tailwind-compatible) ─────────────────── */
+.kinetic-hover-translate {
+  transition: transform 0.2s ease;
+}
+.kinetic-hover-translate:hover {
+  transform: translateX(1rem);
+}
+
+/* ── Brutalist pill button ────────────────────────────────────────────────── */
+.kinetic-btn-primary {
+  background: #000000;
+  color: #ffffff;
+  border: 2px solid #000000;
+  border-radius: 9999px;
+  font-family: 'Space Mono', monospace;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: -0.02em;
+  padding: 10px 24px;
+  cursor: pointer;
+  transition: transform 0.2s ease, background 0.2s ease, color 0.2s ease;
+}
+.kinetic-btn-primary:hover {
+  transform: scale(1.05);
+  background: #FF4D00;
+  color: #000000;
+}
+
+.kinetic-btn-orange {
+  background: #FF4D00;
+  color: #000000;
+  border: 2px solid #000000;
+  border-radius: 9999px;
+  font-family: 'Space Mono', monospace;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: -0.02em;
+  padding: 10px 24px;
+  cursor: pointer;
+  transition: transform 0.2s ease, background 0.2s ease;
+}
+.kinetic-btn-orange:hover {
+  transform: scale(1.05);
+  background: #ffffff;
+}
+
+/* ── Dot-grid scanline texture — subtle control-room feel ─────────────────── */
+.scanline-grid {
+  position: relative;
+}
+.scanline-grid::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(circle, rgba(255,255,255,0.035) 1px, transparent 1px);
+  background-size: 20px 20px;
+  pointer-events: none;
+  z-index: 0;
+}
+.scanline-grid > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* ── Operational status blink ─────────────────────────────────────────────── */
+@keyframes blink-op {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.35; }
+}
+.blink-operational {
+  animation: blink-op 2.4s ease-in-out infinite;
+}
+
+/* ── Glow utilities ───────────────────────────────────────────────────────── */
+.glow-orange {
+  box-shadow: 0 0 16px rgba(255, 77, 0, 0.35), 0 0 40px rgba(255, 77, 0, 0.12);
+}
+.glow-red {
+  box-shadow: 0 0 16px rgba(239, 68, 68, 0.35), 0 0 40px rgba(239, 68, 68, 0.12);
+}
+.glow-emerald {
+  box-shadow: 0 0 12px rgba(52, 211, 153, 0.28), 0 0 32px rgba(52, 211, 153, 0.1);
+}
+
+/* ── Number counter text (large data readouts) ────────────────────────────── */
+.kinetic-readout {
+  font-family: 'Space Mono', monospace;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.04em;
+}

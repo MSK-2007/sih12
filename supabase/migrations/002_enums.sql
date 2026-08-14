@@ -1,0 +1,110 @@
+-- Enums for ResQAI Emergency Platform
+
+CREATE TYPE user_role AS ENUM (
+  'ADMIN',
+  'CONTROL_ROOM_OPERATOR',
+  'RESOURCE_OFFICER',
+  'VIEWER'
+);
+
+CREATE TYPE department_type AS ENUM (
+  'POLICE',
+  'FIRE',
+  'MEDICAL',
+  'DISASTER_MANAGEMENT',
+  'MUNICIPAL',
+  'OTHER'
+);
+
+CREATE TYPE incident_status AS ENUM (
+  'REPORTED',
+  'ANALYSING',
+  'PRIORITIZED',
+  'AWAITING_DISPATCH',
+  'DISPATCHED',
+  'IN_PROGRESS',
+  'RESOLVED',
+  'CLOSED'
+);
+
+CREATE TYPE emergency_type AS ENUM (
+  'ROAD_ACCIDENT',
+  'FIRE',
+  'MEDICAL',
+  'FLOOD',
+  'BUILDING_COLLAPSE',
+  'NATURAL_DISASTER',
+  'INDUSTRIAL_ACCIDENT',
+  'OTHER'
+);
+
+CREATE TYPE injury_level AS ENUM (
+  'NONE',
+  'MINOR',
+  'MODERATE',
+  'SEVERE',
+  'UNKNOWN'
+);
+
+CREATE TYPE priority_level AS ENUM (
+  'LOW',
+  'MEDIUM',
+  'HIGH',
+  'CRITICAL'
+);
+
+CREATE TYPE resource_type AS ENUM (
+  'AMBULANCE',
+  'FIRE_UNIT',
+  'POLICE_UNIT',
+  'RESCUE_TEAM'
+);
+
+CREATE TYPE resource_status AS ENUM (
+  'AVAILABLE',
+  'ASSIGNED',
+  'BUSY',
+  'OFFLINE'
+);
+
+CREATE TYPE assignment_status AS ENUM (
+  'RECOMMENDED',
+  'ACCEPTED',
+  'REJECTED',
+  'DISPATCHED',
+  'IN_PROGRESS',
+  'COMPLETED',
+  'CANCELLED'
+);
+
+CREATE TYPE risk_level AS ENUM (
+  'LOW',
+  'MEDIUM',
+  'HIGH',
+  'CRITICAL'
+);
+
+CREATE TYPE hospital_status AS ENUM (
+  'OPERATIONAL',
+  'NEAR_CAPACITY',
+  'FULL',
+  'OFFLINE'
+);
+
+CREATE TYPE notification_type AS ENUM (
+  'CRITICAL_INCIDENT',
+  'RESOURCE_ASSIGNED',
+  'RESOURCE_REASSIGNED',
+  'ALLOCATION_RECOMMENDATION',
+  'ALLOCATION_REJECTED',
+  'INCIDENT_RESOLVED',
+  'RESOURCE_OFFLINE'
+);
+
+CREATE TYPE simulation_status AS ENUM (
+  'STOPPED',
+  'RUNNING',
+  'PAUSED',
+  'COMPLETED',
+  'RESET'
+);

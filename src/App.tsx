@@ -39,14 +39,14 @@ const NAV_ITEMS = [
 function NavBar() {
   const location = useLocation();
   return (
-    <nav className="hidden lg:flex items-center gap-1.5 bg-black/90 p-1.5 rounded-full border border-white/20">
+    <nav className="flex items-center gap-1 bg-black/90 p-1.5 rounded-full border border-white/20 overflow-x-auto max-w-full custom-scrollbar">
       {NAV_ITEMS.map(({ to, label, icon: Icon, color, exact }) => {
         const isActive = exact ? location.pathname === to : location.pathname.startsWith(to) && to !== '/';
         return (
           <Link
             key={to}
             to={to}
-            className={`px-3 py-1 rounded-full font-space text-[11px] uppercase tracking-[ -0.02em ] transition flex items-center gap-1.5 ${
+            className={`px-2.5 py-1 rounded-full font-space text-[11px] uppercase tracking-[-0.02em] transition flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
               isActive
                 ? 'bg-[#FF4D00] text-black font-bold shadow-lg'
                 : 'text-white/80 hover:text-white hover:bg-white/10'
@@ -83,8 +83,8 @@ function AppContent() {
 
       {/* Header Bar — Kinetic Orange Header */}
       {!isLanding && (
-        <header className="h-16 border-b-2 border-black bg-black px-6 flex items-center justify-between sticky top-0 z-50 shadow-2xl">
-          <div className="flex items-center gap-3">
+        <header className="h-auto min-h-16 py-2 border-b-2 border-black bg-black px-4 md:px-6 flex flex-col lg:flex-row items-center justify-between gap-3 sticky top-0 z-50 shadow-2xl">
+          <div className="flex items-center justify-between w-full lg:w-auto">
             <Link to="/" className="flex items-center gap-2">
               <div className="w-8 h-8 rounded bg-[#FF4D00] text-black flex items-center justify-center font-archivo text-lg shadow-md">
                 <Shield className="w-5 h-5 fill-black text-black" />
@@ -94,13 +94,27 @@ function AppContent() {
                 <span className="hidden sm:inline-block ml-2 text-[10px] px-2 py-0.5 rounded-full bg-[#FF4D00]/20 text-[#FF4D00] border border-[#FF4D00]/40 font-space font-bold">BRUTALIST OPERATIONAL</span>
               </div>
             </Link>
+
+            <Link
+              to="/driver"
+              className="lg:hidden px-3 py-1 bg-[#FF4D00] text-black rounded-full font-space text-xs font-bold flex items-center gap-1"
+            >
+              <Navigation className="w-3.5 h-3.5" /> DRIVER
+            </Link>
           </div>
 
           <NavBar />
 
-          <div className="flex items-center gap-3">
-            <span className="text-[11px] px-3 py-1 rounded-full bg-white/10 border border-white/20 text-white font-space uppercase tracking-tight">
-              OPERATOR: CONTROL_ROOM
+          <div className="hidden lg:flex items-center gap-2">
+            <Link
+              to="/driver"
+              className="text-[11px] px-3 py-1.5 rounded-full bg-[#FF4D00] text-black hover:bg-white font-space font-bold uppercase transition flex items-center gap-1.5 shadow-md"
+            >
+              <Navigation className="w-3.5 h-3.5" />
+              DRIVER CONSOLE
+            </Link>
+            <span className="text-[11px] px-3 py-1.5 rounded-full bg-white/10 border border-white/20 text-white font-space uppercase tracking-tight">
+              OPERATOR
             </span>
           </div>
         </header>

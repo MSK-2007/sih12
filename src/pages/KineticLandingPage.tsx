@@ -27,34 +27,40 @@ export const KineticLandingPage: React.FC = () => {
         </div>
 
         {/* Center Floating Black Pill Navigation */}
-        <nav className="pointer-events-auto hidden md:flex items-center gap-2 bg-black text-white rounded-full px-6 py-2.5 border border-white/20 shadow-2xl">
+        <nav className="pointer-events-auto flex items-center gap-1.5 bg-black text-white rounded-full px-4 py-2 border border-white/20 shadow-2xl overflow-x-auto max-w-full">
           <Link
             to="/control-center"
-            className="font-space text-[12px] tracking-[-0.02em] uppercase text-white/90 hover:text-black hover:bg-white px-3.5 py-1.5 rounded-full transition-colors duration-200"
+            className="font-space text-[12px] tracking-[-0.02em] uppercase text-white/90 hover:text-black hover:bg-white px-3 py-1 rounded-full transition-colors duration-200 whitespace-nowrap"
           >
             Control Center
           </Link>
           <Link
+            to="/driver"
+            className="font-space text-[12px] tracking-[-0.02em] uppercase text-[#FF4D00] hover:text-black hover:bg-[#FF4D00] px-3 py-1 rounded-full font-bold transition-colors duration-200 whitespace-nowrap"
+          >
+            Driver Panel
+          </Link>
+          <Link
             to="/simulation"
-            className="font-space text-[12px] tracking-[-0.02em] uppercase text-white/90 hover:text-black hover:bg-white px-3.5 py-1.5 rounded-full transition-colors duration-200"
+            className="font-space text-[12px] tracking-[-0.02em] uppercase text-white/90 hover:text-black hover:bg-white px-3 py-1 rounded-full transition-colors duration-200 whitespace-nowrap"
           >
             Simulation
           </Link>
           <Link
             to="/analytics"
-            className="font-space text-[12px] tracking-[-0.02em] uppercase text-white/90 hover:text-black hover:bg-white px-3.5 py-1.5 rounded-full transition-colors duration-200"
+            className="font-space text-[12px] tracking-[-0.02em] uppercase text-white/90 hover:text-black hover:bg-white px-3 py-1 rounded-full transition-colors duration-200 whitespace-nowrap"
           >
             Analytics
           </Link>
           <Link
             to="/incidents"
-            className="font-space text-[12px] tracking-[-0.02em] uppercase text-white/90 hover:text-black hover:bg-white px-3.5 py-1.5 rounded-full transition-colors duration-200"
+            className="font-space text-[12px] tracking-[-0.02em] uppercase text-white/90 hover:text-black hover:bg-white px-3 py-1 rounded-full transition-colors duration-200 whitespace-nowrap"
           >
             Incidents
           </Link>
           <Link
             to="/resources"
-            className="font-space text-[12px] tracking-[-0.02em] uppercase text-white/90 hover:text-black hover:bg-white px-3.5 py-1.5 rounded-full transition-colors duration-200"
+            className="font-space text-[12px] tracking-[-0.02em] uppercase text-white/90 hover:text-black hover:bg-white px-3 py-1 rounded-full transition-colors duration-200 whitespace-nowrap"
           >
             Fleet Pool
           </Link>

@@ -20,10 +20,13 @@ import EditResourcePage from './pages/EditResourcePage';
 import MapPage from './pages/MapPage';
 import { DemoBanner } from './components/common/DemoBanner';
 import KineticLandingPage from './pages/KineticLandingPage';
+import DriverPanelPage from './pages/DriverPanelPage';
+import { Navigation } from 'lucide-react';
 
 const NAV_ITEMS = [
   { to: '/kinetic', label: 'Kinetic', icon: Zap, color: 'text-[#FF4D00]', exact: true },
   { to: '/control-center', label: 'Control Center', icon: LayoutDashboard, color: 'text-red-400', exact: true },
+  { to: '/driver', label: 'Driver Panel', icon: Navigation, color: 'text-amber-500', exact: false },
   { to: '/incidents', label: 'Incidents', icon: Radio, color: 'text-amber-400', exact: false },
   { to: '/resources', label: 'Fleet Pool', icon: Truck, color: 'text-emerald-400', exact: false },
   { to: '/map', label: 'GIS Map', icon: MapPin, color: 'text-cyan-400', exact: false },
@@ -119,6 +122,7 @@ function AppContent() {
             <Route path="/resources/:id" element={<ResourceDetailsPage />} />
             <Route path="/resources/:id/edit" element={<EditResourcePage />} />
             <Route path="/map" element={<MapPage />} />
+            <Route path="/driver" element={<DriverPanelPage />} />
             <Route path="/alerts" element={<AlertsHistoryPage />} />
             <Route path="/reallocation" element={<ReallocationHistoryPage />} />
             <Route path="/simulation" element={<SimulationDashboardPage />} />

@@ -1,4 +1,3 @@
-import { supabase, isSupabaseConfigured } from './supabase';
 import { getIncidentById, updateIncidentStatus, addIncidentUpdate } from './incidents';
 import { getResources, getResourceById, updateResourceStatus } from './resources';
 import { getRoute } from './routing';
@@ -75,7 +74,6 @@ export async function confirmDispatch(
     resourcesToAssign.push(res);
   }
 
-  const now = new Date().toISOString();
   const assignedCodes: string[] = [];
 
   // 2. Perform DB assignments & status updates

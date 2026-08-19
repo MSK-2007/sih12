@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { BrowserRouter, Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
-import { Shield, MapPin, Truck, BarChart3, Play, Radio, RefreshCw, LayoutDashboard, Bell, Zap } from 'lucide-react';
+import { Shield, MapPin, Truck, BarChart3, Play, Radio, RefreshCw, LayoutDashboard, Bell, Zap, LogIn, LogOut, UserCheck } from 'lucide-react';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import { ReallocationMonitor } from './components/reallocation/ReallocationMonitor';
 import { ReallocationHistoryPage } from './pages/ReallocationHistoryPage';
 import ControlCenterPage from './pages/ControlCenterPage';
@@ -21,6 +22,7 @@ import MapPage from './pages/MapPage';
 import { DemoBanner } from './components/common/DemoBanner';
 import KineticLandingPage from './pages/KineticLandingPage';
 import DriverPanelPage from './pages/DriverPanelPage';
+import { LoginPage } from './pages/LoginPage';
 import { Navigation } from 'lucide-react';
 
 const NAV_ITEMS = [
@@ -61,6 +63,45 @@ function NavBar() {
   );
 }
 
+function UserHeaderControls() {
+  const { user, profile, signOut } = useAuth();
+
+  return (
+    <div className="flex items-center gap-2">
+      <Link
+        to="/driver"
+        className="text-[11px] px-3 py-1.5 rounded-full bg-[#FF4D00] text-black hover:bg-white font-space font-bold uppercase transition flex items-center gap-1.5 shadow-md"
+      >
+        <Navigation className="w-3.5 h-3.5" />
+        DRIVER
+      </Link>
+      
+      <div className="flex items-center gap-1.5 px-3 py-1 bg-white/10 border border-white/20 rounded-full font-space text-[11px]">
+        <UserCheck className="w-3.5 h-3.5 text-cyan-400" />
+        <span className="font-bold text-amber-400">{profile ? profile.role : 'GUEST'}</span>
+      </div>
+
+      {user ? (
+        <button
+          onClick={() => signOut()}
+          title="Sign Out"
+          className="p-1.5 rounded-full bg-red-500/20 hover:bg-red-500 text-red-400 hover:text-black border border-red-500/40 transition"
+        >
+          <LogOut className="w-3.5 h-3.5" />
+        </button>
+      ) : (
+        <Link
+          to="/login"
+          title="Login"
+          className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-cyan-500 text-black hover:bg-white font-space font-bold text-[11px] uppercase transition shadow-md"
+        >
+          <LogIn className="w-3 h-3" /> LOGIN
+        </Link>
+      )}
+    </div>
+  );
+}
+
 function AppContent() {
   const [activeToast, setActiveToast] = useState<any>(null);
   const { refresh } = useNotifications();
@@ -73,8 +114,7 @@ function AppContent() {
 
   useNotificationRealtime(handleNewNotification);
 
-  // If on landing page (/ or /kinetic), hide the standard app header to display full Kinetic Hero
-  const isLanding = location.pathname === '/' || location.pathname === '/kinetic';
+  const isLanding = location.pathname === '/' || location.pathname === '/kinetic' || location.pathname === '/login';
 
   return (
     <div className="kinetic-theme min-h-screen bg-[#000000] text-white flex flex-col font-inter selection:bg-black selection:text-[#FF4D00]">
@@ -106,16 +146,7 @@ function AppContent() {
           <NavBar />
 
           <div className="hidden lg:flex items-center gap-2">
-            <Link
-              to="/driver"
-              className="text-[11px] px-3 py-1.5 rounded-full bg-[#FF4D00] text-black hover:bg-white font-space font-bold uppercase transition flex items-center gap-1.5 shadow-md"
-            >
-              <Navigation className="w-3.5 h-3.5" />
-              DRIVER CONSOLE
-            </Link>
-            <span className="text-[11px] px-3 py-1.5 rounded-full bg-white/10 border border-white/20 text-white font-space uppercase tracking-tight">
-              OPERATOR
-            </span>
+            <UserHeaderControls />
           </div>
         </header>
       )}
@@ -126,6 +157,7 @@ function AppContent() {
           <Routes>
             <Route path="/" element={<KineticLandingPage />} />
             <Route path="/kinetic" element={<KineticLandingPage />} />
+            <Route path="/login" element={<LoginPage />} />
             <Route path="/dashboard" element={<Navigate to="/control-center" replace />} />
             <Route path="/control-center" element={<ControlCenterPage />} />
             <Route path="/incidents" element={<IncidentsPage />} />
@@ -155,9 +187,12 @@ function AppContent() {
 export function App() {
   return (
     <BrowserRouter>
-      <AppContent />
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
     </BrowserRouter>
   );
 }
 
 export default App;
+

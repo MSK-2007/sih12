@@ -1,3 +1,4 @@
+import React from 'react';
 import { SimulationEvent } from '../../types/simulation';
 import { Activity, CheckCircle2, Clock, AlertCircle } from 'lucide-react';
 
@@ -38,7 +39,7 @@ export const EventTimeline: React.FC<Props> = ({
             const isFailed = evt.status === 'FAILED';
             
             const hasIncident = evt.type.includes('INCIDENT') && evt.payload && typeof evt.payload.title === 'string';
-            const incidentTitle = evt.payload?.title || '';
+            const incidentTitle: string = (evt.payload?.title as string) || '';
             const isClickable = hasIncident && activeIncidentTitles.includes(incidentTitle);
             const isSelected = isClickable && selectedIncidentTitle === incidentTitle;
 

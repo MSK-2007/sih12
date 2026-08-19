@@ -46,6 +46,7 @@ export interface PriorityEngineInput {
   reported_at?: string;
   reportedAt?: string;
   currentTime?: string;
+  environmentalRiskScore?: number; // Phase 19 Contextual Input (e.g. 0-100 from IMD weather/flood warnings)
 }
 
 export interface PriorityEngine {
@@ -57,7 +58,7 @@ export interface PriorityEngine {
  * Fully deterministic, explainable, and configurable decision-support model.
  */
 export class RuleBasedPriorityEngine implements PriorityEngine {
-  public readonly version = '1.0.0-BASELINE_WEIGHTED';
+  public readonly version = '1.1.0-WEATHER_CONTEXTUAL_WEIGHTED';
 
   public calculatePriority(
     input: PriorityEngineInput,
@@ -70,6 +71,7 @@ export class RuleBasedPriorityEngine implements PriorityEngine {
     const locationRisk = (input.location_risk || input.locationRisk || 'MEDIUM') as LocationRiskLevel;
     const reportedAt = input.reported_at || input.reportedAt;
     const now = input.currentTime ? new Date(input.currentTime).getTime() : Date.now();
+    const envRisk = Math.min(100, Math.max(0, input.environmentalRiskScore ?? 0));
 
     // 2. Factor 1: Severity Score (0-100)
     let rawSeverity: number;
@@ -79,7 +81,6 @@ export class RuleBasedPriorityEngine implements PriorityEngine {
       const sMap: Record<string, number> = { LOW: 25, MEDIUM: 50, HIGH: 75, CRITICAL: 100 };
       rawSeverity = sMap[input.severity.toUpperCase()] ?? 50;
     } else {
-      // Prototype heuristic fallback if severity is missing
       const baseType = EMERGENCY_TYPE_SCORES[emergencyType] || 50;
       const baseInj = INJURY_LEVEL_SCORES[injuryLevel] || 40;
       rawSeverity = Math.min(100, Math.round(baseType * 0.6 + baseInj * 0.4));
@@ -100,9 +101,11 @@ export class RuleBasedPriorityEngine implements PriorityEngine {
     const typeScore = EMERGENCY_TYPE_SCORES[emergencyType] ?? EMERGENCY_TYPE_SCORES.OTHER;
     const typeContrib = Math.round(typeScore * weights.emergencyType * 100) / 100;
 
-    // 6. Factor 5: Location Risk Score (0-100)
-    const riskScore = LOCATION_RISK_SCORES[locationRisk] ?? DEFAULT_LOCATION_RISK_SCORE;
-    const riskContrib = Math.round(riskScore * weights.locationRisk * 100) / 100;
+    // 6. Factor 5: Location & Environmental Risk Score (0-100)
+    const baseRiskScore = LOCATION_RISK_SCORES[locationRisk] ?? DEFAULT_LOCATION_RISK_SCORE;
+    // Contextual boost from weather/flood warnings (up to +15 pts, without overriding primary emergency parameters)
+    const combinedRiskScore = Math.min(100, baseRiskScore + Math.round(envRisk * 0.15));
+    const riskContrib = Math.round(combinedRiskScore * weights.locationRisk * 100) / 100;
 
     // 7. Factor 6: Waiting Time Score (0-100)
     let waitingMinutes = 0;
@@ -162,12 +165,14 @@ export class RuleBasedPriorityEngine implements PriorityEngine {
         description: `Category ${emergencyType.replace(/_/g, ' ')} (${typeScore}/100 urgency)`,
       },
       {
-        name: 'Location Risk',
-        rawValue: locationRisk,
-        normalizedScore: riskScore,
+        name: 'Location & Weather Risk',
+        rawValue: envRisk > 0 ? `${locationRisk} + Env Risk (${envRisk})` : locationRisk,
+        normalizedScore: combinedRiskScore,
         weight: weights.locationRisk,
         contribution: riskContrib,
-        description: `Zone risk rating ${locationRisk} (${riskScore}/100)`,
+        description: envRisk > 0 
+          ? `Zone risk ${locationRisk} with IMD contextual weather factor (+${Math.round(envRisk * 0.15)} pts)`
+          : `Zone risk rating ${locationRisk} (${baseRiskScore}/100)`,
       },
       {
         name: 'Waiting Time',

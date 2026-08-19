@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Incident } from '../../types/incident';
 import { IncidentPriorityBadge } from './IncidentPriorityBadge';
 import { IncidentStatusBadge } from './IncidentStatusBadge';
+import { SourceTypeBadge } from '../external/LiveDataPanel';
 import { MapPin, Users, Clock, AlertTriangle, ArrowRight } from 'lucide-react';
 
 interface Props {
@@ -22,13 +23,14 @@ export const IncidentCard: React.FC<Props> = ({ incident }) => {
       <div>
         {/* Header Row */}
         <div className="flex items-start justify-between gap-3 mb-2.5">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <span className="font-mono text-xs font-bold text-slate-400 bg-slate-800/80 px-2 py-0.5 rounded border border-slate-700">
               {incident.incidentNumber}
             </span>
             <span className="text-xs px-2 py-0.5 rounded font-semibold bg-slate-800 text-slate-300">
               {incident.emergencyType.replace('_', ' ')}
             </span>
+            <SourceTypeBadge source={incident.sourceType || 'MANUAL'} />
           </div>
           <IncidentPriorityBadge level={incident.priorityLevel} score={incident.priorityScore} />
         </div>

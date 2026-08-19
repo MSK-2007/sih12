@@ -140,10 +140,11 @@ export async function createIncident(input: CreateIncidentInput): Promise<Incide
     longitude: input.longitude,
     peopleAffected: input.peopleAffected,
     injuryLevel: input.injuryLevel,
-    severity: 'MEDIUM', // Initial default until Phase 7 Priority Engine
-    priorityScore: 0,   // Initial default until Phase 7 Priority Engine
+    severity: 'MEDIUM',
+    priorityScore: 0,
     priorityLevel: 'MEDIUM',
     status: 'REPORTED',
+    sourceType: input.sourceType || 'MANUAL',
     reportedAt: input.reportedAt || now,
     locationId: input.locationId,
     createdAt: now,
@@ -167,6 +168,7 @@ export async function createIncident(input: CreateIncidentInput): Promise<Incide
         priority_score: newIncident.priorityScore,
         priority_level: newIncident.priorityLevel,
         status: newIncident.status,
+        source_type: newIncident.sourceType,
         reported_at: newIncident.reportedAt,
         location_id: newIncident.locationId,
       })

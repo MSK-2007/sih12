@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useControlCenter } from '../hooks/useControlCenter';
 import { ControlCenterHeader } from '../components/control-center/ControlCenterHeader';
 import { KpiGrid } from '../components/control-center/KpiGrid';
@@ -10,8 +10,13 @@ import { SystemStatusCard } from '../components/control-center/SystemStatusCard'
 import { RecentActivityTimeline } from '../components/control-center/RecentActivityTimeline';
 import { IncidentDrawer } from '../components/control-center/IncidentDrawer';
 import { EmergencyMap } from '../components/map/EmergencyMap';
+import { LiveDataPanel } from '../components/external/LiveDataPanel';
+import { LiveEarthquakesPanel } from '../components/external/LiveEarthquakesPanel';
 import { Incident } from '../types/incident';
 import { Resource } from '../types/resource';
+import { EnvironmentalAlert } from '../types/externalData';
+import { ExternalEvent } from '../types/externalEvents';
+import { getActiveEnvironmentalAlerts } from '../services/environmentalAlertsService';
 import { MapPin, AlertCircle, RefreshCw, LayoutDashboard } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { KineticPageHeader } from '../components/kinetic/KineticPageHeader';
@@ -38,6 +43,12 @@ export const ControlCenterPage: React.FC = () => {
 
   const navigate = useNavigate();
   const [selectedDrawerIncident, setSelectedDrawerIncident] = useState<Incident | null>(null);
+  const [activeAlerts, setActiveAlerts] = useState<EnvironmentalAlert[]>([]);
+  const [earthquakes, setEarthquakes] = useState<ExternalEvent[]>([]);
+
+  useEffect(() => {
+    getActiveEnvironmentalAlerts().then(setActiveAlerts).catch(() => {});
+  }, []);
 
   const handleOpenIncident = (incidentId: string) => {
     const inc = allActiveIncidents.find((i) => i.id === incidentId);
@@ -94,6 +105,13 @@ export const ControlCenterPage: React.FC = () => {
           </button>
         }
       />
+
+      {/* Real-Time Live Data Ingestion Panels (Phase 19 & Phase 20A) */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
+        <LiveDataPanel onAlertConvertedToIncident={refresh} />
+        <LiveEarthquakesPanel onEventConvertedToIncident={refresh} onEarthquakesLoaded={setEarthquakes} />
+      </div>
+
       {/* Control Center Header */}
       <ControlCenterHeader
         searchQuery={searchQuery}
@@ -125,7 +143,7 @@ export const ControlCenterPage: React.FC = () => {
               </h2>
             </div>
             <span className="font-space text-[10px] text-emerald-400 font-bold uppercase bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/30">
-              ● OPENSTREETMAP / OSRM LIVE
+              ● OPENSTREETMAP / USGS / OSRM LIVE
             </span>
           </div>
 
@@ -133,8 +151,11 @@ export const ControlCenterPage: React.FC = () => {
             <EmergencyMap
               incidents={incidents}
               resources={resources}
+              alerts={activeAlerts}
+              earthquakes={earthquakes}
               onSelectIncident={handleSelectMapIncident}
               onSelectResource={handleSelectMapResource}
+              onAlertConverted={refresh}
             />
           </div>
         </div>

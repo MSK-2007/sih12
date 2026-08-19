@@ -6,9 +6,13 @@ import { Incident } from '../../types/incident';
 import { Resource } from '../../types/resource';
 import { Hospital } from '../../types/hospital';
 import { MapFilterState, RouteResult, DEFAULT_MAP_FILTERS } from '../../types/map';
+import { EnvironmentalAlert } from '../../types/externalData';
+import { ExternalEvent } from '../../types/externalEvents';
 import { IncidentMarker } from './IncidentMarker';
 import { ResourceMarker } from './ResourceMarker';
 import { HospitalMarker } from './HospitalMarker';
+import { EnvironmentalAlertMarker } from './EnvironmentalAlertMarker';
+import { EarthquakeMarker } from './EarthquakeMarker';
 import { RouteLayer } from './RouteLayer';
 
 interface MapControllerProps {
@@ -30,6 +34,8 @@ interface Props {
   incidents: Incident[];
   resources: Resource[];
   hospitals?: Hospital[];
+  alerts?: EnvironmentalAlert[];
+  earthquakes?: ExternalEvent[];
   filters?: MapFilterState;
   selectedIncident?: Incident | null;
   selectedResource?: Resource | null;
@@ -40,12 +46,15 @@ interface Props {
   onSelectIncident?: (incident: Incident) => void;
   onSelectResource?: (resource: Resource) => void;
   onSelectHospital?: (hospital: Hospital) => void;
+  onAlertConverted?: () => void;
 }
 
 export const EmergencyMap: React.FC<Props> = ({
   incidents,
   resources,
   hospitals = [],
+  alerts = [],
+  earthquakes = [],
   filters = DEFAULT_MAP_FILTERS,
   selectedIncident = null,
   selectedResource = null,
@@ -55,6 +64,7 @@ export const EmergencyMap: React.FC<Props> = ({
   onSelectIncident = () => {},
   onSelectResource = () => {},
   onSelectHospital = () => {},
+  onAlertConverted = () => {},
 }) => {
   // Filter Incidents
   const filteredIncidents = incidents.filter((i) => {
@@ -90,6 +100,16 @@ export const EmergencyMap: React.FC<Props> = ({
 
         {/* Route Polyline Layer */}
         <RouteLayer route={route} />
+
+        {/* Environmental Warning Alerts Overlay Layer */}
+        {alerts.map((a) => (
+          <EnvironmentalAlertMarker key={a.id} alert={a} onAlertConverted={onAlertConverted} />
+        ))}
+
+        {/* USGS Earthquake Event Markers Layer */}
+        {earthquakes.map((eq) => (
+          <EarthquakeMarker key={eq.id} event={eq} onEventConverted={onAlertConverted} />
+        ))}
 
         {/* Hospital Markers */}
         {filteredHospitals.map((h) => (

@@ -1,3 +1,5 @@
+import { DataSourceType } from './externalData';
+
 export type EmergencyType = 
   | 'ROAD_ACCIDENT'
   | 'FIRE'
@@ -38,6 +40,7 @@ export interface Incident {
   priorityScore: number;
   priorityLevel: PriorityLevel;
   status: IncidentStatus;
+  sourceType?: DataSourceType;
   reportedAt: string;
   createdBy?: string;
   assignedOperator?: string;
@@ -56,6 +59,7 @@ export interface CreateIncidentInput {
   longitude: number;
   peopleAffected: number;
   injuryLevel: InjuryLevel;
+  sourceType?: DataSourceType;
   locationId?: string;
   reportedAt?: string;
 }
@@ -68,6 +72,7 @@ export interface UpdateIncidentInput {
   peopleAffected?: number;
   injuryLevel?: InjuryLevel;
   status?: IncidentStatus;
+  sourceType?: DataSourceType;
 }
 
 export interface IncidentUpdate {

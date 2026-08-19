@@ -33,8 +33,13 @@ CREATE INDEX IF NOT EXISTS idx_external_events_source ON external_events(source)
 -- 3. Row-Level Security (RLS)
 ALTER TABLE external_events ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Public read external_events" ON external_events;
 CREATE POLICY "Public read external_events" ON external_events FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Public insert external_events" ON external_events;
 CREATE POLICY "Public insert external_events" ON external_events FOR INSERT WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Public update external_events" ON external_events;
 CREATE POLICY "Public update external_events" ON external_events FOR UPDATE USING (true);
 
 -- 4. Enable Supabase Realtime for external_events table

@@ -1,2 +1,3 @@
--- Enable UUID extension
+-- Enable extensions for ResQAI Platform
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";

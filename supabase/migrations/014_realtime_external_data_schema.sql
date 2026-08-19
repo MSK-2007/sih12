@@ -95,11 +95,21 @@ ALTER TABLE environmental_alerts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE external_ingestion_logs ENABLE ROW LEVEL SECURITY;
 
 -- Permissive read policies for operational user roles
+DROP POLICY IF EXISTS "Public select weather_observations" ON weather_observations;
 CREATE POLICY "Public select weather_observations" ON weather_observations FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Public select environmental_alerts" ON environmental_alerts;
 CREATE POLICY "Public select environmental_alerts" ON environmental_alerts FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Public select external_ingestion_logs" ON external_ingestion_logs;
 CREATE POLICY "Public select external_ingestion_logs" ON external_ingestion_logs FOR SELECT USING (true);
 
 -- Write policies for authenticated / service role
+DROP POLICY IF EXISTS "Auth insert weather_observations" ON weather_observations;
 CREATE POLICY "Auth insert weather_observations" ON weather_observations FOR INSERT WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Auth insert environmental_alerts" ON environmental_alerts;
 CREATE POLICY "Auth insert environmental_alerts" ON environmental_alerts FOR INSERT WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Auth insert external_ingestion_logs" ON external_ingestion_logs;
 CREATE POLICY "Auth insert external_ingestion_logs" ON external_ingestion_logs FOR INSERT WITH CHECK (true);

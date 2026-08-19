@@ -3,7 +3,7 @@
 -- =========================================================
 
 CREATE TABLE IF NOT EXISTS simulation_runs (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT NOT NULL,
   scenario_id TEXT,
   status TEXT NOT NULL DEFAULT 'IDLE',
@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS simulation_runs (
 );
 
 CREATE TABLE IF NOT EXISTS simulation_incidents (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   simulation_run_id UUID REFERENCES simulation_runs(id) ON DELETE CASCADE,
   incident_type TEXT NOT NULL,
   latitude NUMERIC(10,6) NOT NULL,
@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS simulation_incidents (
 );
 
 CREATE TABLE IF NOT EXISTS simulation_results (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   simulation_run_id UUID REFERENCES simulation_runs(id) ON DELETE CASCADE,
   algorithm TEXT NOT NULL, -- 'BASELINE' vs 'RESQAI'
   avg_response_time NUMERIC(5,2) NOT NULL,
@@ -44,7 +44,7 @@ CREATE TABLE IF NOT EXISTS simulation_results (
 );
 
 CREATE TABLE IF NOT EXISTS simulation_events (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   simulation_run_id UUID REFERENCES simulation_runs(id) ON DELETE CASCADE,
   simulated_time TEXT NOT NULL,
   offset_minutes INTEGER DEFAULT 0,
@@ -65,19 +65,42 @@ ALTER TABLE simulation_incidents ENABLE ROW LEVEL SECURITY;
 ALTER TABLE simulation_results ENABLE ROW LEVEL SECURITY;
 ALTER TABLE simulation_events ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Allow authenticated read simulation_runs" ON simulation_runs;
 CREATE POLICY "Allow authenticated read simulation_runs" ON simulation_runs FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Allow authenticated write simulation_runs" ON simulation_runs;
 CREATE POLICY "Allow authenticated write simulation_runs" ON simulation_runs FOR ALL USING (true);
 
+DROP POLICY IF EXISTS "Allow authenticated read simulation_incidents" ON simulation_incidents;
 CREATE POLICY "Allow authenticated read simulation_incidents" ON simulation_incidents FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Allow authenticated write simulation_incidents" ON simulation_incidents;
 CREATE POLICY "Allow authenticated write simulation_incidents" ON simulation_incidents FOR ALL USING (true);
 
+DROP POLICY IF EXISTS "Allow authenticated read simulation_results" ON simulation_results;
 CREATE POLICY "Allow authenticated read simulation_results" ON simulation_results FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Allow authenticated write simulation_results" ON simulation_results;
 CREATE POLICY "Allow authenticated write simulation_results" ON simulation_results FOR ALL USING (true);
 
+DROP POLICY IF EXISTS "Allow authenticated read simulation_events" ON simulation_events;
 CREATE POLICY "Allow authenticated read simulation_events" ON simulation_events FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Allow authenticated write simulation_events" ON simulation_events;
 CREATE POLICY "Allow authenticated write simulation_events" ON simulation_events FOR ALL USING (true);
 
 -- Realtime publications
-ALTER PUBLICATION supabase_realtime ADD TABLE simulation_runs;
-ALTER PUBLICATION supabase_realtime ADD TABLE simulation_results;
-ALTER PUBLICATION supabase_realtime ADD TABLE simulation_events;
+DO $$ BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE simulation_runs;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
+
+DO $$ BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE simulation_results;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
+
+DO $$ BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE simulation_events;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;

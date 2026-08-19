@@ -3,8 +3,8 @@
 -- =========================================================
 
 -- 1. DEPARTMENTS
-CREATE TABLE departments (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+CREATE TABLE IF NOT EXISTS departments (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT NOT NULL,
   department_type department_type NOT NULL DEFAULT 'OTHER',
   contact_number TEXT,
@@ -14,7 +14,7 @@ CREATE TABLE departments (
 );
 
 -- 2. PROFILES (Extends auth.users)
-CREATE TABLE profiles (
+CREATE TABLE IF NOT EXISTS profiles (
   id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   full_name TEXT NOT NULL,
   email TEXT NOT NULL UNIQUE,
@@ -27,8 +27,8 @@ CREATE TABLE profiles (
 );
 
 -- 3. LOCATIONS / ZONES
-CREATE TABLE locations (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+CREATE TABLE IF NOT EXISTS locations (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT NOT NULL,
   address TEXT,
   latitude DOUBLE PRECISION NOT NULL CHECK (latitude >= -90 AND latitude <= 90),
@@ -40,8 +40,8 @@ CREATE TABLE locations (
 );
 
 -- 4. INCIDENTS
-CREATE TABLE incidents (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+CREATE TABLE IF NOT EXISTS incidents (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   incident_number TEXT NOT NULL UNIQUE,
   emergency_type emergency_type NOT NULL,
   title TEXT NOT NULL,
@@ -64,8 +64,8 @@ CREATE TABLE incidents (
 );
 
 -- 5. RESOURCES
-CREATE TABLE resources (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+CREATE TABLE IF NOT EXISTS resources (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   resource_code TEXT NOT NULL UNIQUE,
   name TEXT NOT NULL,
   resource_type resource_type NOT NULL,
@@ -83,8 +83,8 @@ CREATE TABLE resources (
 );
 
 -- 6. RESOURCE ASSIGNMENTS
-CREATE TABLE resource_assignments (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+CREATE TABLE IF NOT EXISTS resource_assignments (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   incident_id UUID NOT NULL REFERENCES incidents(id) ON DELETE CASCADE,
   resource_id UUID NOT NULL REFERENCES resources(id) ON DELETE CASCADE,
   assignment_status assignment_status NOT NULL DEFAULT 'RECOMMENDED',
@@ -103,8 +103,8 @@ CREATE TABLE resource_assignments (
 );
 
 -- 7. HOSPITALS
-CREATE TABLE hospitals (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+CREATE TABLE IF NOT EXISTS hospitals (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT NOT NULL,
   address TEXT NOT NULL,
   latitude DOUBLE PRECISION NOT NULL CHECK (latitude >= -90 AND latitude <= 90),
@@ -119,8 +119,8 @@ CREATE TABLE hospitals (
 );
 
 -- 8. INCIDENT UPDATES (TIMELINE LOG)
-CREATE TABLE incident_updates (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+CREATE TABLE IF NOT EXISTS incident_updates (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   incident_id UUID NOT NULL REFERENCES incidents(id) ON DELETE CASCADE,
   user_id UUID REFERENCES profiles(id) ON DELETE SET NULL,
   status incident_status NOT NULL,
@@ -129,8 +129,8 @@ CREATE TABLE incident_updates (
 );
 
 -- 9. NOTIFICATIONS
-CREATE TABLE notifications (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+CREATE TABLE IF NOT EXISTS notifications (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
   type notification_type NOT NULL DEFAULT 'CRITICAL_INCIDENT',
   title TEXT NOT NULL,
@@ -142,8 +142,8 @@ CREATE TABLE notifications (
 );
 
 -- 10. SIMULATION RUNS
-CREATE TABLE simulation_runs (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+CREATE TABLE IF NOT EXISTS simulation_runs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT NOT NULL,
   status simulation_status NOT NULL DEFAULT 'RUNNING',
   started_at TIMESTAMPTZ DEFAULT NOW(),
@@ -157,8 +157,8 @@ CREATE TABLE simulation_runs (
 );
 
 -- 11. SIMULATION EVENTS
-CREATE TABLE simulation_events (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+CREATE TABLE IF NOT EXISTS simulation_events (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   simulation_run_id UUID NOT NULL REFERENCES simulation_runs(id) ON DELETE CASCADE,
   event_type TEXT NOT NULL,
   event_time TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -169,8 +169,8 @@ CREATE TABLE simulation_events (
 );
 
 -- 12. ANALYTICS RESULTS
-CREATE TABLE analytics_results (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+CREATE TABLE IF NOT EXISTS analytics_results (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   simulation_run_id UUID REFERENCES simulation_runs(id) ON DELETE CASCADE,
   metric_name TEXT NOT NULL,
   metric_value NUMERIC(10,2) NOT NULL,

@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS profiles (
 );
 
 -- Trigger to sync updated_at for profiles
+DROP TRIGGER IF EXISTS update_profiles_updated_at ON profiles;
 CREATE TRIGGER update_profiles_updated_at 
 BEFORE UPDATE ON profiles 
 FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
@@ -44,7 +45,7 @@ CREATE TRIGGER on_auth_user_created
 
 -- 2. INCIDENT AI ANALYSIS TABLE (Gemini AI server-side output)
 CREATE TABLE IF NOT EXISTS incident_ai_analysis (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   incident_id UUID REFERENCES incidents(id) ON DELETE CASCADE,
   incident_type TEXT NOT NULL,
   severity TEXT NOT NULL,
@@ -59,7 +60,7 @@ CREATE TABLE IF NOT EXISTS incident_ai_analysis (
 
 -- 3. AUDIT LOGS TABLE
 CREATE TABLE IF NOT EXISTS audit_logs (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
   action TEXT NOT NULL,
   entity_type TEXT NOT NULL,
@@ -95,8 +96,13 @@ ALTER TABLE incident_ai_analysis ENABLE ROW LEVEL SECURITY;
 ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
 
 -- RLS for profiles
+DROP POLICY IF EXISTS "Allow users to view all profiles" ON profiles;
 CREATE POLICY "Allow users to view all profiles" ON profiles FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Users can update own profile" ON profiles;
 CREATE POLICY "Users can update own profile" ON profiles FOR UPDATE USING (auth.uid() = id);
+
+DROP POLICY IF EXISTS "Admins can update any profile" ON profiles;
 CREATE POLICY "Admins can update any profile" ON profiles FOR UPDATE USING (
   EXISTS (
     SELECT 1 FROM profiles WHERE profiles.id = auth.uid() AND profiles.role = 'ADMIN'
@@ -104,14 +110,31 @@ CREATE POLICY "Admins can update any profile" ON profiles FOR UPDATE USING (
 );
 
 -- RLS for incident_ai_analysis
+DROP POLICY IF EXISTS "Allow authenticated read incident_ai_analysis" ON incident_ai_analysis;
 CREATE POLICY "Allow authenticated read incident_ai_analysis" ON incident_ai_analysis FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Allow authenticated write incident_ai_analysis" ON incident_ai_analysis;
 CREATE POLICY "Allow authenticated write incident_ai_analysis" ON incident_ai_analysis FOR ALL USING (true);
 
 -- RLS for audit_logs
+DROP POLICY IF EXISTS "Allow authenticated read audit_logs" ON audit_logs;
 CREATE POLICY "Allow authenticated read audit_logs" ON audit_logs FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Allow authenticated write audit_logs" ON audit_logs;
 CREATE POLICY "Allow authenticated write audit_logs" ON audit_logs FOR INSERT WITH CHECK (true);
 
 -- 7. REALTIME PUBLICATION SETUP
-ALTER PUBLICATION supabase_realtime ADD TABLE profiles;
-ALTER PUBLICATION supabase_realtime ADD TABLE incident_ai_analysis;
-ALTER PUBLICATION supabase_realtime ADD TABLE audit_logs;
+DO $$ BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE profiles;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
+
+DO $$ BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE incident_ai_analysis;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
+
+DO $$ BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE audit_logs;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;

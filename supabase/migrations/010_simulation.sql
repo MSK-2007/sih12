@@ -2,45 +2,45 @@
 -- ResQAI Platform Phase 12
 
 CREATE TABLE IF NOT EXISTS public.simulation_runs (
-  id VARCHAR(255) PRIMARY KEY,
-  scenario_id VARCHAR(100) NOT NULL,
-  name VARCHAR(255) NOT NULL,
-  status VARCHAR(20) NOT NULL CHECK (status IN ('IDLE', 'RUNNING', 'PAUSED', 'COMPLETED', 'STOPPED', 'FAILED')),
-  mode VARCHAR(20) NOT NULL CHECK (mode IN ('AUTOMATIC', 'MANUAL', 'STEP')),
-  speed_multiplier INT DEFAULT 1,
-  current_time VARCHAR(20) NOT NULL DEFAULT '10:30:00',
-  start_time VARCHAR(20) NOT NULL DEFAULT '10:30:00',
-  elapsed_seconds INT DEFAULT 0,
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT NOT NULL,
+  scenario_id TEXT,
+  status TEXT NOT NULL DEFAULT 'IDLE',
+  mode TEXT NOT NULL DEFAULT 'AUTOMATIC',
+  speed_multiplier NUMERIC(3,1) DEFAULT 1.0,
+  config JSONB DEFAULT '{}'::jsonb,
   metrics JSONB DEFAULT '{}'::jsonb,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  completed_at TIMESTAMPTZ
 );
 
 CREATE TABLE IF NOT EXISTS public.simulation_events (
-  id VARCHAR(255) PRIMARY KEY,
-  simulation_run_id VARCHAR(255) REFERENCES public.simulation_runs(id) ON DELETE CASCADE,
-  simulated_time VARCHAR(20) NOT NULL,
-  offset_minutes INT NOT NULL,
-  type VARCHAR(100) NOT NULL,
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  simulation_run_id UUID REFERENCES public.simulation_runs(id) ON DELETE CASCADE,
+  simulated_time TEXT NOT NULL,
+  offset_minutes INTEGER DEFAULT 0,
+  event_type TEXT NOT NULL,
   payload JSONB DEFAULT '{}'::jsonb,
-  status VARCHAR(20) NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING', 'PROCESSING', 'COMPLETED', 'FAILED')),
-  processed_at TIMESTAMPTZ,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  status TEXT NOT NULL DEFAULT 'PENDING',
+  created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- Performance Indexes
 CREATE INDEX IF NOT EXISTS idx_simulation_events_run ON public.simulation_events(simulation_run_id);
-CREATE INDEX IF NOT EXISTS idx_simulation_events_status ON public.simulation_events(status);
 
 -- Enable RLS
 ALTER TABLE public.simulation_runs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.simulation_events ENABLE ROW LEVEL SECURITY;
 
 -- RLS Policies
+DROP POLICY IF EXISTS "Operators can view simulation runs" ON public.simulation_runs;
 CREATE POLICY "Operators can view simulation runs"
-  ON public.simulation_runs FOR SELECT USING (auth.role() = 'authenticated' OR auth.role() = 'anon');
+  ON public.simulation_runs FOR SELECT USING (true);
 
+DROP POLICY IF EXISTS "Operators can manage simulation runs" ON public.simulation_runs;
 CREATE POLICY "Operators can manage simulation runs"
-  ON public.simulation_runs FOR ALL USING (auth.role() = 'authenticated' OR auth.role() = 'anon');
+  ON public.simulation_runs FOR ALL USING (true);
 
+DROP POLICY IF EXISTS "Operators can manage simulation events" ON public.simulation_events;
 CREATE POLICY "Operators can manage simulation events"
-  ON public.simulation_events FOR ALL USING (auth.role() = 'authenticated' OR auth.role() = 'anon');
+  ON public.simulation_events FOR ALL USING (true);

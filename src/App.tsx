@@ -24,6 +24,7 @@ import ResourceDetailsPage from './pages/ResourceDetailsPage';
 import EditResourcePage from './pages/EditResourcePage';
 import MapPage from './pages/MapPage';
 import { DemoBanner } from './components/common/DemoBanner';
+import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { LiveStatusBadge } from './components/common/LiveStatusBadge';
 import { LocationSelector } from './components/common/LocationSelector';
 import { AiAssistantPanel } from './components/common/AiAssistantPanel';
@@ -122,10 +123,10 @@ function AppContent() {
   const { user, session, profile, hasPermission } = useAuth();
   const isAuthenticated = Boolean(user && session && profile);
   const canUseAiAssistant = isAuthenticated && hasPermission('AI_ASSISTANT_USE');
-  const { refresh } = useNotifications();
+  const { refresh } = useNotifications(undefined, isAuthenticated);
   const location = useLocation();
   const navigate = useNavigate();
-  const { health, getProviderByKey } = useLiveStatus();
+  const { health, getProviderByKey } = useLiveStatus(isAuthenticated);
 
   const handleNewNotification = (notif: any) => {
     if (!isAuthenticated) return;
@@ -133,7 +134,7 @@ function AppContent() {
     refresh();
   };
 
-  useNotificationRealtime(handleNewNotification);
+  useNotificationRealtime(handleNewNotification, isAuthenticated);
   const geminiProvider = getProviderByKey('gemini');
 
   const isLanding = location.pathname === '/' || location.pathname === '/kinetic' || location.pathname === '/login';
@@ -232,13 +233,15 @@ function AppContent() {
 
 export function App() {
   return (
-    <BrowserRouter>
-      <AuthProvider>
-        <OperationalLocationProvider>
-          <AppContent />
-        </OperationalLocationProvider>
-      </AuthProvider>
-    </BrowserRouter>
+    <ErrorBoundary>
+      <BrowserRouter>
+        <AuthProvider>
+          <OperationalLocationProvider>
+            <AppContent />
+          </OperationalLocationProvider>
+        </AuthProvider>
+      </BrowserRouter>
+    </ErrorBoundary>
   );
 }
 

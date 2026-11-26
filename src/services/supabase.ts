@@ -73,6 +73,18 @@ export function markBackendLive(): void {
   emitConnectionState();
 }
 
+export function markBackendReachableAuthRequired(): void {
+  if (!isSupabaseConfigured) return;
+  const now = new Date().toISOString();
+  connectionState = {
+    ...connectionState,
+    mode: 'CACHED',
+    lastCheckedAt: now,
+    lastError: 'Backend reachable. Authentication required for operational data.',
+  };
+  emitConnectionState();
+}
+
 export function markBackendOffline(errorMessage: string): void {
   const now = new Date().toISOString();
   connectionState = {
@@ -107,7 +119,14 @@ export async function checkSupabaseConnection(): Promise<BackendConnectionState>
       .limit(1);
 
     if (error) {
-      markBackendOffline(error.message || 'Supabase database query failed');
+      // PostgreSQL error code 42501 indicates insufficient privileges (RLS/grant enforcement).
+      // This establishes that the Supabase host and PostgREST API are reachable,
+      // but does NOT prove authenticated data access. Mark reachable, not LIVE.
+      if (error.code === '42501' || error.message?.includes('permission denied')) {
+        markBackendReachableAuthRequired();
+      } else {
+        markBackendOffline(error.message || 'Supabase database query failed');
+      }
     } else {
       markBackendLive();
     }

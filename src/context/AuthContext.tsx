@@ -31,6 +31,8 @@ interface AuthContextType {
   loading: boolean;
   sessionExpired: boolean;
   isSupabaseConnected: boolean;
+  authError: string | null;
+  profileError: string | null;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signUp: (email: string, password: string, fullName: string, role?: UserRole) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
@@ -45,6 +47,8 @@ const AuthContext = createContext<AuthContextType>({
   loading: false,
   sessionExpired: false,
   isSupabaseConnected: isSupabaseConfigured,
+  authError: null,
+  profileError: null,
   signIn: async () => ({ error: new Error('AuthProvider not mounted') }),
   signUp: async () => ({ error: new Error('AuthProvider not mounted') }),
   signOut: async () => {},
@@ -64,6 +68,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [sessionExpired, setSessionExpired] = useState<boolean>(false);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [profileError, setProfileError] = useState<string | null>(null);
 
   const clearAuthState = () => {
     setUser(null);
@@ -83,9 +89,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (!error && data) {
         if (data.is_active === false) {
-          await supabase.auth.signOut();
+          await supabase.auth.signOut().catch(() => {});
+          setAuthError('Account has been deactivated. Please contact an administrator.');
           return null;
         }
+        setProfileError(null);
         const normalizedRole = normalizeUserRole(data.role) || 'FIELD_RESPONDER';
         return {
           id: data.id,
@@ -97,9 +105,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           createdAt: data.created_at,
           updatedAt: data.updated_at,
         };
+      } else if (error) {
+        console.warn('[AuthContext] Error fetching profile:', error.message);
+        setProfileError(error.message);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.warn('[AuthContext] Error fetching profile:', err);
+      setProfileError(err?.message || 'Failed to fetch user profile');
     }
 
     // Least-privilege fallback ONLY for an already verified Supabase user whose profile trigger hasn't synced yet
@@ -115,45 +127,80 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     if (!isSupabaseConfigured) {
       clearAuthState();
+      setAuthError('Supabase environment variables are not configured in this environment.');
       setLoading(false);
       return;
     }
 
     let mounted = true;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    let handledByAuthChange = false;
 
-    supabase.auth.getSession().then(async ({ data: { session: initialSession } }) => {
-      if (!mounted) return;
-      if (!initialSession || isSessionExpired(initialSession)) {
-        if (initialSession) {
-          setSessionExpired(true);
-          await supabase.auth.signOut().catch(() => {});
-          await logSecurityAuditEvent({
-            action: 'AUTH_SESSION_EXPIRED',
-            entityType: 'auth_session',
-            entityId: initialSession.user?.id || 'unknown',
-          });
-        }
-        clearAuthState();
-        setLoading(false);
-        return;
-      }
-
-      setSessionExpired(false);
-      setSession(initialSession);
-      setUser(initialSession.user);
-      const userProfile = await fetchProfile(initialSession.user.id, initialSession.user.email || '');
-      if (mounted) {
-        if (!userProfile) {
-          clearAuthState();
-        } else {
-          setProfile(userProfile);
-        }
-        setLoading(false);
-      }
+    // Deterministic session initialization with a 4-second timeout guarantee
+    const sessionPromise = supabase.auth.getSession();
+    const timeoutPromise = new Promise<{ data: { session: null }; timedOut?: boolean }>((resolve) => {
+      timeoutId = setTimeout(() => resolve({ data: { session: null }, timedOut: true }), 4000);
     });
+
+    Promise.race([sessionPromise, timeoutPromise])
+      .then(async (res) => {
+        if (!mounted || handledByAuthChange) return;
+        const initialSession = res.data.session;
+        const timedOut = (res as any).timedOut;
+
+        try {
+          if (!initialSession || isSessionExpired(initialSession)) {
+            if (initialSession && isSessionExpired(initialSession)) {
+              setSessionExpired(true);
+              await supabase.auth.signOut().catch(() => {});
+              await logSecurityAuditEvent({
+                action: 'AUTH_SESSION_EXPIRED',
+                entityType: 'auth_session',
+                entityId: initialSession.user?.id || 'unknown',
+              }).catch(() => {});
+            }
+            if (timedOut) {
+              console.warn('[AuthContext] Session retrieval timed out after 4000ms.');
+            }
+            clearAuthState();
+            return;
+          }
+
+          setSessionExpired(false);
+          setSession(initialSession);
+          setUser(initialSession.user);
+          const userProfile = await fetchProfile(initialSession.user.id, initialSession.user.email || '');
+          if (mounted && !handledByAuthChange) {
+            if (!userProfile) {
+              clearAuthState();
+            } else {
+              setProfile(userProfile);
+            }
+          }
+        } catch (e: any) {
+          console.error('[AuthContext] Session init error:', e);
+          setAuthError(e?.message || 'Authentication initialization error');
+          clearAuthState();
+        } finally {
+          if (mounted && !handledByAuthChange) setLoading(false);
+        }
+      })
+      .catch((e: any) => {
+        if (mounted && !handledByAuthChange) {
+          console.error('[AuthContext] Unhandled session error:', e);
+          setAuthError(e?.message || 'Authentication error');
+          clearAuthState();
+          setLoading(false);
+        }
+      });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, nextSession) => {
       if (!mounted) return;
+      handledByAuthChange = true;
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+        timeoutId = null;
+      }
 
       if (!nextSession || isSessionExpired(nextSession)) {
         const prevUserId = user?.id || 'unknown';
@@ -164,7 +211,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             action: 'AUTH_SESSION_EXPIRED',
             entityType: 'auth_session',
             entityId: prevUserId,
-          });
+          }).catch(() => {});
         }
         setLoading(false);
         return;
@@ -187,7 +234,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               entityId: nextSession.user.id,
               newValue: { role: userProfile.role },
               userId: nextSession.user.id,
-            });
+            }).catch(() => {});
           }
         }
         setLoading(false);
@@ -196,6 +243,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     return () => {
       mounted = false;
+      if (timeoutId) clearTimeout(timeoutId);
       subscription.unsubscribe();
     };
   }, []);
@@ -301,6 +349,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         loading,
         sessionExpired,
         isSupabaseConnected: isSupabaseConfigured,
+        authError,
+        profileError,
         signIn,
         signUp,
         signOut,

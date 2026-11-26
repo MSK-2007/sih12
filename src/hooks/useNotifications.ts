@@ -9,13 +9,17 @@ import {
   dismissNotification,
 } from '../services/notifications';
 
-export function useNotifications(initialFilters?: NotificationFilters) {
+export function useNotifications(initialFilters?: NotificationFilters, enabled: boolean = true) {
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [unreadCount, setUnreadCount] = useState<number>(0);
   const [loading, setLoading] = useState<boolean>(true);
   const [filters, setFilters] = useState<NotificationFilters>(initialFilters || {});
 
   const load = useCallback(async () => {
+    if (!enabled) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const [list, count] = await Promise.all([getNotifications(filters), getUnreadCount()]);
@@ -26,11 +30,15 @@ export function useNotifications(initialFilters?: NotificationFilters) {
     } finally {
       setLoading(false);
     }
-  }, [filters]);
+  }, [filters, enabled]);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    if (enabled) {
+      load();
+    } else {
+      setLoading(false);
+    }
+  }, [load, enabled]);
 
   const handleMarkAsRead = useCallback(async (id: string) => {
     await markAsRead(id);

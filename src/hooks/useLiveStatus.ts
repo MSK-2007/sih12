@@ -33,7 +33,7 @@ export interface LiveStatusState {
  * - Triggers event processing pipeline periodically
  * - Exposes per-provider health including STALE detection
  */
-export function useLiveStatus(): LiveStatusState {
+export function useLiveStatus(enabled: boolean = true): LiveStatusState {
   const [health, setHealth] = useState<SystemHealthStatus>({
     overallStatus: 'UNKNOWN',
     providers: [],
@@ -87,6 +87,7 @@ export function useLiveStatus(): LiveStatusState {
 
   // ── Scheduled health check (every 5 minutes) ────────────────────────────
   useEffect(() => {
+    if (!enabled) return;
     isMountedRef.current = true;
     loadHealth();
 
@@ -105,11 +106,11 @@ export function useLiveStatus(): LiveStatusState {
       clearTimeout(initialCheckTimeout);
       if (healthCheckTimerRef.current) clearInterval(healthCheckTimerRef.current);
     };
-  }, []);
+  }, [enabled, loadHealth, runManualCheck]);
 
   // ── Scheduled event pipeline (every 2 minutes) ──────────────────────────
   useEffect(() => {
-    if (!isSupabaseConfigured) return;
+    if (!enabled || !isSupabaseConfigured) return;
 
     const runPipeline = async () => {
       try {
@@ -131,10 +132,11 @@ export function useLiveStatus(): LiveStatusState {
       clearTimeout(pipelineTimeout);
       if (pipelineTimerRef.current) clearInterval(pipelineTimerRef.current);
     };
-  }, []);
+  }, [enabled]);
 
   // ── Supabase Realtime subscription for provider health ──────────────────
   useEffect(() => {
+    if (!enabled || !isSupabaseConfigured) return;
     const unsubscribe = subscribeToProviderHealth((updatedProvider) => {
       if (!isMountedRef.current) return;
       setHealth(prev => {

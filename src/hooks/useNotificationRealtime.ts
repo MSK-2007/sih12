@@ -7,10 +7,11 @@ import {
 } from '../services/notificationEvents';
 
 export function useNotificationRealtime(
-  onNewNotification: (notif: AppNotification) => void
+  onNewNotification: (notif: AppNotification) => void,
+  enabled: boolean = true
 ) {
   useEffect(() => {
-    if (!isSupabaseConfigured) return;
+    if (!enabled || !isSupabaseConfigured) return;
 
     // 1. Subscribe to DB notifications table directly
     const notifSub = supabase

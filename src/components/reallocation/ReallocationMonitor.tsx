@@ -2,6 +2,7 @@ import React, { useState, useCallback } from 'react';
 import { ReallocationRecommendation } from '../../engines/reallocationEngine';
 import { ReallocationAlertBanner } from './ReallocationAlertBanner';
 import { useReallocationRealtime } from '../../hooks/useReallocationRealtime';
+import { useAuth } from '../../context/AuthContext';
 
 interface Props {
   children: React.ReactNode;
@@ -12,6 +13,8 @@ interface Props {
  * Mount once near the top of the component tree (inside Router).
  */
 export const ReallocationMonitor: React.FC<Props> = ({ children }) => {
+  const { user, session, profile } = useAuth();
+  const isAuthenticated = Boolean(user && session && profile);
   const [pendingRecommendation, setPendingRecommendation] = useState<ReallocationRecommendation | null>(null);
   const [dismissed, setDismissed] = useState<string | null>(null);
 
@@ -27,7 +30,7 @@ export const ReallocationMonitor: React.FC<Props> = ({ children }) => {
     setPendingRecommendation(null);
   }, [pendingRecommendation]);
 
-  useReallocationRealtime(handleReallocationNeeded, true);
+  useReallocationRealtime(handleReallocationNeeded, isAuthenticated);
 
   return (
     <>

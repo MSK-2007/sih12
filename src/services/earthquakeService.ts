@@ -1,6 +1,6 @@
-import { supabase, isSupabaseConfigured } from './supabase';
+import { supabase, isSupabaseConfigured, markBackendLive, markBackendOffline } from './supabase';
 import { ExternalEvent, EarthquakeIngestionResult, EarthquakeSeverity } from '../types/externalEvents';
-import { createIncident } from './incidents';
+import { createIncident, recalculateIncidentPriority } from './incidents';
 
 // Real-time USGS mock fallbacks (Never fabricates fake data; provides documented fallback when network is isolated)
 const FALLBACK_EARTHQUAKES: ExternalEvent[] = [
@@ -53,98 +53,90 @@ export async function getLatestEarthquakes(): Promise<EarthquakeIngestionResult>
         body: {},
       });
 
-      if (!error && data?.success && Array.isArray(data.events)) {
-        const events: ExternalEvent[] = data.events.map((e: any) => ({
-          id: e.id || `usgs-${e.source_event_id}`,
-          source: e.source || 'USGS',
-          sourceEventId: e.source_event_id,
-          eventType: e.event_type || 'EARTHQUAKE',
-          latitude: Number(e.latitude),
-          longitude: Number(e.longitude),
-          magnitude: Number(e.magnitude),
-          title: e.title,
-          severity: (e.severity as EarthquakeSeverity) || classifySeverity(Number(e.magnitude)),
-          occurredAt: e.occurred_at,
-          receivedAt: e.received_at || new Date().toISOString(),
-          status: e.status || 'DETECTED',
-          rawData: e.raw_data,
-        }));
+      if (!error && data?.success) {
+        markBackendLive();
 
-        // Persist events to Supabase DB external_events table with duplicate prevention
-        for (const ev of events) {
-          try {
-            await supabase.from('external_events').insert({
-              source: ev.source,
-              source_event_id: ev.sourceEventId,
-              event_type: ev.eventType,
-              latitude: ev.latitude,
-              longitude: ev.longitude,
-              magnitude: ev.magnitude,
-              title: ev.title,
-              severity: ev.severity,
-              occurred_at: ev.occurredAt,
-              status: ev.status,
-              raw_data: ev.rawData,
-            });
-          } catch (err) {
-            // Duplicate event insertion safely ignored by unique constraint
-          }
+        if (Array.isArray(data.events) && data.events.length > 0) {
+          const events: ExternalEvent[] = data.events.map(mapDbRowToEarthquake);
+          return {
+            success: true,
+            events,
+            provider: 'USGS Real-Time Earthquake Hazards Program',
+            status: 'ONLINE',
+          };
         }
 
-        return {
-          success: true,
-          events,
-          provider: 'USGS Real-Time Earthquake Hazards Program',
-          status: 'ONLINE',
-        };
+        // Deployed Edge Function may return { success: true, eventsCount: N } after DB upsert
+        const { data: ingestedRows, error: fetchAfterErr } = await supabase
+          .from('external_events')
+          .select('*')
+          .eq('source', 'USGS')
+          .order('occurred_at', { ascending: false })
+          .limit(50);
+
+        if (!fetchAfterErr && ingestedRows && ingestedRows.length > 0) {
+          return {
+            success: true,
+            events: ingestedRows.map(mapDbRowToEarthquake),
+            provider: 'USGS Real-Time Earthquake Hazards Program',
+            status: 'ONLINE',
+          };
+        }
       }
     } catch (err) {
       console.warn('[EarthquakeService] Edge function invocation error, trying DB fallback:', err);
     }
 
-    // 2. Database query fallback from external_events table
+    // 2. Database query fallback from external_events table (filtered to USGS source)
     try {
       const { data: dbRows, error: dbError } = await supabase
         .from('external_events')
         .select('*')
+        .eq('source', 'USGS')
         .order('occurred_at', { ascending: false })
         .limit(50);
 
       if (!dbError && dbRows && dbRows.length > 0) {
-        const events: ExternalEvent[] = dbRows.map((r: any) => ({
-          id: r.id,
-          source: r.source,
-          sourceEventId: r.source_event_id,
-          eventType: r.event_type,
-          latitude: Number(r.latitude),
-          longitude: Number(r.longitude),
-          magnitude: Number(r.magnitude),
-          title: r.title,
-          severity: r.severity,
-          occurredAt: r.occurred_at,
-          receivedAt: r.received_at,
-          status: r.status,
-          rawData: r.raw_data,
-        }));
-
+        markBackendLive();
         return {
           success: true,
-          events,
+          events: dbRows.map(mapDbRowToEarthquake),
           provider: 'USGS Real-Time Data (Database Cache)',
           status: 'CACHED',
         };
       }
+      if (dbError) markBackendOffline(dbError.message);
     } catch (dbErr) {
+      markBackendOffline(dbErr instanceof Error ? dbErr.message : 'USGS DB fallback failed');
       console.warn('[EarthquakeService] DB query failed:', dbErr);
     }
   }
 
-  // 3. Fallback when network / database is unreachable
+  // 3. Offline fallback when network & database cache are both unavailable (never claims ONLINE)
   return {
-    success: true,
+    success: false,
     events: FALLBACK_EARTHQUAKES,
-    provider: 'USGS Real-Time Feed (Cached Fallback)',
-    status: 'ONLINE',
+    provider: 'USGS Real-Time Feed (Offline Fallback)',
+    status: 'OFFLINE',
+    errorMessage: 'USGS live feed and Supabase database cache are unreachable.',
+  };
+}
+
+function mapDbRowToEarthquake(r: Record<string, any>): ExternalEvent {
+  return {
+    id: r.id || `usgs-${r.source_event_id}`,
+    source: r.source || 'USGS',
+    sourceEventId: r.source_event_id,
+    eventType: r.event_type || 'EARTHQUAKE',
+    latitude: Number(r.latitude),
+    longitude: Number(r.longitude),
+    magnitude: Number(r.magnitude ?? 0),
+    title: r.title,
+    severity: (r.severity as EarthquakeSeverity) || classifySeverity(Number(r.magnitude ?? 0)),
+    occurredAt: r.occurred_at,
+    receivedAt: r.received_at || new Date().toISOString(),
+    status: r.status || 'DETECTED',
+    rawData: r.raw_data,
   };
 }
 
@@ -206,17 +198,20 @@ export async function convertEarthquakeToIncident(event: ExternalEvent) {
     sourceType: 'EXTERNAL_ALERT',
   });
 
-  // Update status in external_events DB table
+  // Link event to created incident in external_events DB table (reconciled in Migration 020)
   if (isSupabaseConfigured && event.id) {
     try {
       await supabase
         .from('external_events')
-        .update({ status: 'CONVERTED_TO_INCIDENT' })
+        .update({ status: 'CONVERTED_TO_INCIDENT', incident_id: incident.id })
         .eq('id', event.id);
     } catch (err) {
       console.warn('[EarthquakeService] Status update warning:', err);
     }
   }
+
+  // Recalculate priority incorporating 50km environmental risk context
+  await recalculateIncidentPriority(incident.id).catch(() => null);
 
   return incident;
 }

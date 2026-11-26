@@ -1,0 +1,46 @@
+# Supabase CLI & Edge Functions Gateway Configuration
+# Project: resqai (itmeoierfppvoaljebco)
+
+project_id = "itmeoierfppvoaljebco"
+
+# ---------------------------------------------------------------------------
+# Group A — Interactive AI Functions (Human User JWT Required at Gateway)
+# ---------------------------------------------------------------------------
+[functions.analyze-incident]
+verify_jwt = true
+
+[functions.explain-reallocation]
+verify_jwt = true
+
+[functions.gemini-assistant]
+verify_jwt = true
+
+# ---------------------------------------------------------------------------
+# Group B & C — Scheduled Ingestion / Pipeline & Dual-Use Internal Functions
+# Gateway JWT verification is disabled so pg_cron (`x-cron-secret`) and
+# internal `service_role` calls (`sb_secret_...`) reach `_shared/security.ts`,
+# which enforces strict fail-closed authentication and role checks in code.
+# ---------------------------------------------------------------------------
+[functions.analyze-external-event]
+verify_jwt = false
+
+[functions.ingest-earthquakes]
+verify_jwt = false
+
+[functions.ingest-fire-events]
+verify_jwt = false
+
+[functions.ingest-imd-alerts]
+verify_jwt = false
+
+[functions.ingest-weather]
+verify_jwt = false
+
+[functions.ingest-alerts]
+verify_jwt = false
+
+[functions.monitor-data-providers]
+verify_jwt = false
+
+[functions.process-live-events]
+verify_jwt = false

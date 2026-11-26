@@ -1,4 +1,4 @@
-import { supabase, isSupabaseConfigured } from './supabase';
+import { supabase, isSupabaseConfigured, markBackendLive, markBackendOffline } from './supabase';
 import { Hospital, HospitalStatus } from '../types/hospital';
 import { INITIAL_HOSPITALS } from './mockData';
 
@@ -6,13 +6,19 @@ let localHospitalsStore: Hospital[] = [...INITIAL_HOSPITALS];
 
 export async function fetchHospitals(): Promise<Hospital[]> {
   if (isSupabaseConfigured) {
-    const { data, error } = await supabase
-      .from('hospitals')
-      .select('*')
-      .order('available_beds', { ascending: false });
+    try {
+      const { data, error } = await supabase
+        .from('hospitals')
+        .select('*')
+        .order('available_beds', { ascending: false });
 
-    if (!error && data) {
-      return data.map(mapDbHospitalToModel);
+      if (!error && data) {
+        markBackendLive();
+        return data.map(mapDbHospitalToModel);
+      }
+      if (error) markBackendOffline(error.message);
+    } catch (err: unknown) {
+      markBackendOffline(err instanceof Error ? err.message : 'Supabase hospitals query failed');
     }
   }
   return [...localHospitalsStore];

@@ -85,10 +85,22 @@ export function useReallocationRealtime(
       })
       .subscribe();
 
+    // Subscribe to environmental & external events (IMD/USGS/FIRMS alerts that change risk profile)
+    const envSub = supabase
+      .channel('realloc-env-events')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'external_events' }, () => {
+        triggerAnalysis();
+      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'environmental_alerts' }, () => {
+        triggerAnalysis();
+      })
+      .subscribe();
+
     return () => {
       supabase.removeChannel(incidentSub);
       supabase.removeChannel(resourceSub);
       supabase.removeChannel(assignmentSub);
+      supabase.removeChannel(envSub);
       if (debounceTimer.current) clearTimeout(debounceTimer.current);
     };
   }, [enabled, triggerAnalysis]);

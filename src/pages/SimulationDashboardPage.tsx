@@ -17,6 +17,8 @@ import { KineticPageHeader } from '../components/kinetic/KineticPageHeader';
 import { fetchAssignments } from '../services/assignments';
 import { ResourceAssignment } from '../types/assignment';
 
+import { InteractiveDemoRunner } from '../components/simulation/InteractiveDemoRunner';
+
 export const SimulationDashboardPage: React.FC = () => {
   const navigate = useNavigate();
   const {
@@ -127,6 +129,9 @@ export const SimulationDashboardPage: React.FC = () => {
 
       {/* Guided Hackathon Demo Panel */}
       <DemoModePanel onStartDemo={handleStartDemo} isRunning={isRunning} />
+
+      {/* Interactive 13-Step End-to-End Demo Pipeline Runner */}
+      <InteractiveDemoRunner />
 
       {/* Clock & Speed Bar */}
       <SimulationClockCard

@@ -46,6 +46,7 @@ export interface Incident {
   assignedOperator?: string;
   locationId?: string;
   assignedResourceCount?: number;
+  environmentalRiskScore?: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -60,6 +61,7 @@ export interface CreateIncidentInput {
   peopleAffected: number;
   injuryLevel: InjuryLevel;
   sourceType?: DataSourceType;
+  environmentalRiskScore?: number;
   locationId?: string;
   reportedAt?: string;
 }
@@ -73,6 +75,7 @@ export interface UpdateIncidentInput {
   injuryLevel?: InjuryLevel;
   status?: IncidentStatus;
   sourceType?: DataSourceType;
+  environmentalRiskScore?: number;
 }
 
 export interface IncidentUpdate {

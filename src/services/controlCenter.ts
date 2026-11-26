@@ -1,7 +1,7 @@
 import { getIncidents } from './incidents';
 import { getResources } from './resources';
 import { fetchAssignments } from './assignments';
-import { isSupabaseConfigured } from './supabase';
+import { isSupabaseConfigured, checkSupabaseConnection, supabase } from './supabase';
 import { PriorityLevel } from '../types/incident';
 import { ResourceType } from '../types/resource';
 
@@ -253,13 +253,37 @@ export async function getOperatorAttentionItems(): Promise<OperatorAttentionItem
 
 /**
  * Returns verifiable health status of system components.
+ * Never reports database/realtime as CONNECTED unless a live query succeeds.
  */
 export async function getSystemServiceStatus(): Promise<SystemServiceStatus> {
+  if (!isSupabaseConfigured) {
+    return {
+      database: 'DISCONNECTED',
+      realtime: 'DISCONNECTED',
+      gis: 'CONNECTED',
+      routing: 'AVAILABLE',
+      authentication: 'INACTIVE',
+    };
+  }
+
+  const conn = await checkSupabaseConnection();
+  const isLive = conn.mode === 'LIVE';
+
+  let authActive = false;
+  if (isLive) {
+    try {
+      const { data } = await supabase.auth.getSession();
+      authActive = Boolean(data?.session);
+    } catch {
+      authActive = false;
+    }
+  }
+
   return {
-    database: isSupabaseConfigured ? 'CONNECTED' : 'CONNECTED', // Using local fallback or Supabase
-    realtime: isSupabaseConfigured ? 'CONNECTED' : 'CONNECTED',
+    database: isLive ? 'CONNECTED' : 'DISCONNECTED',
+    realtime: isLive ? 'CONNECTED' : 'DISCONNECTED',
     gis: 'CONNECTED',
     routing: 'AVAILABLE',
-    authentication: 'ACTIVE',
+    authentication: authActive ? 'ACTIVE' : 'INACTIVE',
   };
 }

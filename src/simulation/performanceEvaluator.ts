@@ -217,9 +217,11 @@ export function runResQAIAlgorithm(
 /**
  * Runs a side-by-side performance evaluation comparing Baseline vs ResQAI.
  */
+import { INITIAL_INCIDENTS, INITIAL_RESOURCES } from '../services/mockData';
+
 export function evaluatePerformance(
-  incidents: Incident[],
-  resources: Resource[],
+  incidents: Incident[] = INITIAL_INCIDENTS,
+  resources: Resource[] = INITIAL_RESOURCES,
   trafficLevel: string = 'MEDIUM'
 ): PerformanceEvaluationReport {
   const trafficMultiplier = trafficLevel === 'SEVERE' ? 2.2 : trafficLevel === 'HIGH' ? 1.6 : trafficLevel === 'LOW' ? 0.8 : 1.0;

@@ -1,47 +1,69 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-interface AppNotification {
-  id: string;
-  incidentId?: string;
-  type: string;
-  message: string;
-  timestamp: string;
-}
+vi.mock('../../src/services/supabase', () => ({
+  isSupabaseConfigured: false,
+  supabase: {},
+}));
 
-function addNotificationUnique(list: AppNotification[], newNotif: AppNotification): AppNotification[] {
-  const isDuplicate = list.some(
-    n => n.incidentId === newNotif.incidentId && n.type === newNotif.type && n.message === newNotif.message
-  );
-  if (isDuplicate) return list;
-  return [newNotif, ...list];
-}
+import { notificationRules } from '../../src/engines/notificationRules';
+import { notificationEngine } from '../../src/engines/notificationEngine';
+import {
+  createNotification,
+  getNotifications,
+  markAsRead,
+  acknowledgeNotification,
+  dismissNotification,
+} from '../../src/services/notifications';
+import { MOCK_INCIDENT_ROAD_ACCIDENT } from '../fixtures/mockData';
 
-describe('Notifications System Integration Tests', () => {
-  it('should add new notifications to list', () => {
-    const list: AppNotification[] = [];
-    const notif: AppNotification = {
-      id: 'notif-1',
-      incidentId: 'inc-1',
-      type: 'NEW_INCIDENT',
-      message: 'New Critical Incident Reported',
-      timestamp: new Date().toISOString(),
-    };
-
-    const updated = addNotificationUnique(list, notif);
-    expect(updated.length).toBe(1);
+describe('Notifications System Integration Tests (Actual App Modules)', () => {
+  beforeEach(() => {
+    notificationEngine.clearCache();
   });
 
-  it('should prevent duplicate notification creation for identical events', () => {
-    const notif: AppNotification = {
-      id: 'notif-1',
-      incidentId: 'inc-1',
-      type: 'NEW_INCIDENT',
-      message: 'New Critical Incident Reported',
-      timestamp: new Date().toISOString(),
+  it('should evaluate critical incident rules and suppress duplicates via notificationEngine', () => {
+    const uniqueIncident = {
+      ...MOCK_INCIDENT_ROAD_ACCIDENT,
+      id: `inc-notif-${Date.now()}`,
     };
 
-    const list = [notif];
-    const updated = addNotificationUnique(list, { ...notif, id: 'notif-2' });
-    expect(updated.length).toBe(1); // Duplicate prevented
+    const ruleOut = notificationRules.evaluateIncidentCreated(uniqueIncident);
+    expect(ruleOut.shouldNotify).toBe(true);
+    expect(ruleOut.severity).toBe('CRITICAL');
+    expect(ruleOut.type).toBe('CRITICAL_INCIDENT');
+
+    const first = notificationEngine.processRuleOutput(ruleOut);
+    expect(first).not.toBeNull();
+
+    const duplicate = notificationEngine.processRuleOutput(ruleOut);
+    expect(duplicate).toBeNull();
+  });
+
+  it('should persist notifications and transition state across READ, ACKNOWLEDGED, and DISMISSED', async () => {
+    const uniqueIncident = {
+      ...MOCK_INCIDENT_ROAD_ACCIDENT,
+      id: `inc-store-${Date.now()}`,
+    };
+
+    const ruleOut = notificationRules.evaluateIncidentCreated(uniqueIncident);
+    const notif = notificationEngine.processRuleOutput(ruleOut)!;
+
+    const saved = await createNotification(notif);
+    expect(saved.state).toBe('UNREAD');
+
+    const dedupSaved = await createNotification({ ...notif, id: 'notif-dup-id' });
+    expect(dedupSaved.id).toBe(saved.id);
+
+    await markAsRead(saved.id);
+    let list = await getNotifications({ state: 'READ' });
+    expect(list.some((n) => n.id === saved.id)).toBe(true);
+
+    await acknowledgeNotification(saved.id);
+    list = await getNotifications({ state: 'ACKNOWLEDGED' });
+    expect(list.some((n) => n.id === saved.id)).toBe(true);
+
+    await dismissNotification(saved.id);
+    list = await getNotifications({ state: 'DISMISSED' });
+    expect(list.some((n) => n.id === saved.id)).toBe(true);
   });
 });

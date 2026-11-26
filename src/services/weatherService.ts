@@ -1,4 +1,4 @@
-import { supabase, isSupabaseConfigured } from './supabase';
+import { supabase, isSupabaseConfigured, markBackendLive, markBackendOffline } from './supabase';
 import { WeatherObservation } from '../types/externalData';
 
 const DEFAULT_WEATHER: WeatherObservation = {
@@ -33,6 +33,7 @@ export async function getLatestWeatherObservation(
       });
 
       if (!error && data?.success && data.observation) {
+        markBackendLive();
         const obs = data.observation;
         const normalized: WeatherObservation = {
           id: obs.id || `weather-${Date.now()}`,
@@ -51,7 +52,7 @@ export async function getLatestWeatherObservation(
           isStale: false,
         };
 
-        // Persist observation to Supabase table
+        // Best-effort persistence to Supabase weather_observations table (only if authenticated or permitted by RLS)
         try {
           await supabase.from('weather_observations').insert({
             source: normalized.source,
@@ -66,25 +67,26 @@ export async function getLatestWeatherObservation(
             warning_level: normalized.warningLevel,
             observed_at: normalized.observedAt,
           });
-        } catch (_) {
-          // ignore DB insert error
+        } catch {
+          // ignore if RLS rejects client anon insert
         }
 
         return { observation: normalized, status: 'ONLINE' };
       }
     } catch (err) {
-      console.warn('[WeatherService] Server ingestion unavailable, falling back to local dataset:', err);
+      console.warn('[WeatherService] Server ingestion unavailable, falling back to DB cache:', err);
     }
 
     // 2. Try querying Supabase weather_observations table
     try {
-      const { data: dbRows } = await supabase
+      const { data: dbRows, error: dbErr } = await supabase
         .from('weather_observations')
         .select('*')
         .order('observed_at', { ascending: false })
         .limit(1);
 
-      if (dbRows && dbRows.length > 0) {
+      if (!dbErr && dbRows && dbRows.length > 0) {
+        markBackendLive();
         const row = dbRows[0];
         const observedTime = new Date(row.observed_at).getTime();
         const ageMinutes = (Date.now() - observedTime) / 60000;
@@ -110,17 +112,20 @@ export async function getLatestWeatherObservation(
           status: isStale ? 'STALE' : 'CACHED',
         };
       }
+      if (dbErr) markBackendOffline(dbErr.message);
     } catch (dbErr) {
+      markBackendOffline(dbErr instanceof Error ? dbErr.message : 'Weather DB query failed');
       console.warn('[WeatherService] DB query failed:', dbErr);
     }
   }
 
-  // 3. Client Fallback (Never breaks application)
+  // 3. Offline Fallback (Never pretends to be ONLINE)
   return {
     observation: {
       ...DEFAULT_WEATHER,
       observedAt: new Date(Date.now() - 5 * 60000).toISOString(),
+      isStale: true,
     },
-    status: 'ONLINE',
+    status: 'OFFLINE',
   };
 }

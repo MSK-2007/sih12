@@ -1,4 +1,4 @@
-import { supabase, isSupabaseConfigured } from './supabase';
+import { supabase, isSupabaseConfigured, markBackendLive, markBackendOffline } from './supabase';
 import {
   Resource,
   CreateResourceInput,
@@ -9,6 +9,7 @@ import {
 } from '../types/resource';
 import { ResourceAssignment } from '../types/assignment';
 import { INITIAL_RESOURCES } from './mockData';
+import { assertAuthorizedActor } from './authGuard';
 
 let localResourcesStore: Resource[] = [...INITIAL_RESOURCES];
 let localAssignmentsHistory: ResourceAssignment[] = [
@@ -36,14 +37,21 @@ export async function getResources(filters?: ResourceFilters): Promise<Resource[
   let list: Resource[] = [];
 
   if (isSupabaseConfigured) {
-    const { data, error } = await supabase
-      .from('resources')
-      .select('*')
-      .order('resource_code', { ascending: true });
+    try {
+      const { data, error } = await supabase
+        .from('resources')
+        .select('*')
+        .order('resource_code', { ascending: true });
 
-    if (!error && data) {
-      list = data.map(mapDbResourceToModel);
-    } else {
+      if (!error && data) {
+        markBackendLive();
+        list = data.map(mapDbResourceToModel);
+      } else {
+        markBackendOffline(error?.message || 'Failed to query resources from Supabase');
+        list = [...localResourcesStore];
+      }
+    } catch (err: unknown) {
+      markBackendOffline(err instanceof Error ? err.message : 'Supabase resources query failed');
       list = [...localResourcesStore];
     }
   } else {
@@ -81,7 +89,7 @@ export async function getResources(filters?: ResourceFilters): Promise<Resource[
     list.sort((a, b) => {
       if (sortBy === 'status') {
         const order: Record<ResourceStatus, number> = { AVAILABLE: 1, ASSIGNED: 2, BUSY: 3, OFFLINE: 4 };
-        return isAsc ? order[a.status] - order[b.status] : order[a.status] - order[b.status];
+        return isAsc ? order[a.status] - order[b.status] : order[b.status] - order[a.status];
       }
 
       let valA: any = a[sortBy === 'resource_code' ? 'resourceCode' : sortBy === 'resource_type' ? 'resourceType' : 'updatedAt'];
@@ -120,6 +128,7 @@ export async function getResourceById(id: string): Promise<Resource | null> {
  * Creates a new resource unit.
  */
 export async function createResource(input: CreateResourceInput): Promise<Resource> {
+  await assertAuthorizedActor('RESOURCE_MANAGE', 'createResource');
   // Validate duplicate resource code
   const existingCode = localResourcesStore.find(
     (r) => r.resourceCode.toUpperCase() === input.resourceCode.toUpperCase()
@@ -180,28 +189,43 @@ export async function createResource(input: CreateResourceInput): Promise<Resour
  * Updates a resource's editable fields.
  */
 export async function updateResource(id: string, input: UpdateResourceInput): Promise<Resource | null> {
+  await assertAuthorizedActor('RESOURCE_MANAGE', 'updateResource');
   const now = new Date().toISOString();
 
+  if (input.status !== undefined) {
+    const current = await getResourceById(id);
+    if (!current) return null;
+    const transitionCheck = validateResourceStatusTransition(current.status, input.status);
+    if (!transitionCheck.valid) {
+      throw new Error(transitionCheck.reason || `Invalid resource transition to ${input.status}`);
+    }
+  }
+
   if (isSupabaseConfigured) {
+    const dbPatch: Record<string, unknown> = { updated_at: now };
+    if (input.name !== undefined) dbPatch.name = input.name;
+    if (input.departmentId !== undefined) dbPatch.department_id = input.departmentId;
+    if (input.capability !== undefined) dbPatch.capability = input.capability;
+    if (input.capacity !== undefined) dbPatch.capacity = input.capacity;
+    if (input.latitude !== undefined) dbPatch.latitude = input.latitude;
+    if (input.longitude !== undefined) dbPatch.longitude = input.longitude;
+    if (input.status !== undefined) dbPatch.status = input.status;
+    if (input.isActive !== undefined) dbPatch.is_active = input.isActive;
+
     const { data, error } = await supabase
       .from('resources')
-      .update({
-        name: input.name,
-        department_id: input.departmentId,
-        capability: input.capability,
-        capacity: input.capacity,
-        latitude: input.latitude,
-        longitude: input.longitude,
-        status: input.status,
-        is_active: input.isActive,
-        updated_at: now,
-      })
+      .update(dbPatch)
       .eq('id', id)
       .select()
       .single();
 
     if (!error && data) {
+      markBackendLive();
       return mapDbResourceToModel(data);
+    }
+    if (error) {
+      markBackendOffline(error.message);
+      throw new Error(`Failed to update resource in Supabase: ${error.message}`);
     }
   }
 
@@ -225,16 +249,25 @@ export async function updateResource(id: string, input: UpdateResourceInput): Pr
 }
 
 /**
- * Updates a resource status with business transition validation rules.
+ * Updates a resource status with transition validation and optimistic concurrency guard.
  */
 export async function updateResourceStatus(
   id: string,
   newStatus: ResourceStatus,
-  currentAssignmentId?: string
+  currentAssignmentId?: string | null,
+  expectedCurrentStatus?: ResourceStatus
 ): Promise<{ success: boolean; resource?: Resource; error?: string }> {
+  await assertAuthorizedActor('FIELD_STATUS_UPDATE', 'updateResourceStatus');
   const resource = await getResourceById(id);
   if (!resource) {
     return { success: false, error: 'Resource unit not found' };
+  }
+
+  if (expectedCurrentStatus && resource.status !== expectedCurrentStatus) {
+    return {
+      success: false,
+      error: `Concurrent modification detected: resource ${resource.resourceCode} is ${resource.status}, expected ${expectedCurrentStatus}`,
+    };
   }
 
   const transitionCheck = validateResourceStatusTransition(resource.status, newStatus);
@@ -249,26 +282,45 @@ export async function updateResourceStatus(
     };
     if (currentAssignmentId !== undefined) {
       updatePayload.current_assignment_id = currentAssignmentId;
+    } else if (newStatus === 'AVAILABLE') {
+      updatePayload.current_assignment_id = null;
     }
 
     const { data, error } = await supabase
       .from('resources')
       .update(updatePayload)
       .eq('id', id)
+      .eq('status', resource.status)
       .select()
       .single();
 
     if (!error && data) {
+      markBackendLive();
       return { success: true, resource: mapDbResourceToModel(data) };
     }
+
+    return {
+      success: false,
+      error: error?.message || `Concurrent update conflict for resource ${resource.resourceCode}`,
+    };
   }
 
-  resource.status = newStatus;
-  if (currentAssignmentId !== undefined) {
-    resource.currentAssignmentId = currentAssignmentId;
+  const localRes = localResourcesStore.find((r) => r.id === id);
+  if (!localRes) {
+    return { success: false, error: 'Resource unit not found' };
   }
-  resource.updatedAt = new Date().toISOString();
-  return { success: true, resource: { ...resource } };
+  if (localRes.status !== resource.status) {
+    return { success: false, error: `Concurrent update conflict for resource ${localRes.resourceCode}` };
+  }
+
+  localRes.status = newStatus;
+  if (currentAssignmentId !== undefined) {
+    localRes.currentAssignmentId = currentAssignmentId ?? undefined;
+  } else if (newStatus === 'AVAILABLE') {
+    localRes.currentAssignmentId = undefined;
+  }
+  localRes.updatedAt = new Date().toISOString();
+  return { success: true, resource: { ...localRes } };
 }
 
 /**
@@ -279,6 +331,19 @@ export async function updateResourceLocation(
   latitude: number,
   longitude: number
 ): Promise<Resource | null> {
+  await assertAuthorizedActor('FIELD_STATUS_UPDATE', 'updateResourceLocation');
+
+  if (
+    !Number.isFinite(latitude) ||
+    latitude < -90 ||
+    latitude > 90 ||
+    !Number.isFinite(longitude) ||
+    longitude < -180 ||
+    longitude > 180
+  ) {
+    throw new Error('Invalid GPS coordinates supplied for resource location update.');
+  }
+
   const now = new Date().toISOString();
 
   if (isSupabaseConfigured) {
@@ -295,7 +360,13 @@ export async function updateResourceLocation(
       .single();
 
     if (!error && data) {
+      markBackendLive();
       return mapDbResourceToModel(data);
+    }
+
+    if (error) {
+      markBackendOffline(error.message);
+      throw new Error(`Failed to update resource location: ${error.message}`);
     }
   }
 

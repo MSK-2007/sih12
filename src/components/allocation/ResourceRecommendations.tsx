@@ -56,7 +56,7 @@ export const ResourceRecommendations: React.FC<Props> = ({ incident, onStatusRef
             Resource Allocation Engine
           </h2>
           <p className="text-xs text-slate-400 mt-0.5">
-            Suitability scoring algorithm ($0-100$) evaluating capability, travel ETA, distance, and workload.
+            Suitability scoring algorithm (0–100) evaluating capability, travel ETA, distance, and workload.
           </p>
         </div>
 

@@ -13,6 +13,7 @@ import { ResourceMarker } from './ResourceMarker';
 import { HospitalMarker } from './HospitalMarker';
 import { EnvironmentalAlertMarker } from './EnvironmentalAlertMarker';
 import { EarthquakeMarker } from './EarthquakeMarker';
+import { FireMarker } from './FireMarker';
 import { RouteLayer } from './RouteLayer';
 
 interface MapControllerProps {
@@ -36,6 +37,7 @@ interface Props {
   hospitals?: Hospital[];
   alerts?: EnvironmentalAlert[];
   earthquakes?: ExternalEvent[];
+  externalEvents?: ExternalEvent[];
   filters?: MapFilterState;
   selectedIncident?: Incident | null;
   selectedResource?: Resource | null;
@@ -55,6 +57,7 @@ export const EmergencyMap: React.FC<Props> = ({
   hospitals = [],
   alerts = [],
   earthquakes = [],
+  externalEvents,
   filters = DEFAULT_MAP_FILTERS,
   selectedIncident = null,
   selectedResource = null,
@@ -66,6 +69,9 @@ export const EmergencyMap: React.FC<Props> = ({
   onSelectHospital = () => {},
   onAlertConverted = () => {},
 }) => {
+  // Combine earthquakes and externalEvents props
+  const allEvents = externalEvents || earthquakes;
+
   // Filter Incidents
   const filteredIncidents = incidents.filter((i) => {
     if (!filters.showIncidents) return false;
@@ -106,10 +112,13 @@ export const EmergencyMap: React.FC<Props> = ({
           <EnvironmentalAlertMarker key={a.id} alert={a} onAlertConverted={onAlertConverted} />
         ))}
 
-        {/* USGS Earthquake Event Markers Layer */}
-        {earthquakes.map((eq) => (
-          <EarthquakeMarker key={eq.id} event={eq} onEventConverted={onAlertConverted} />
-        ))}
+        {/* Real-time External Data Markers (USGS Earthquakes & NASA FIRMS Active Fires) */}
+        {allEvents.map((ev) => {
+          if (ev.source === 'NASA_FIRMS' || ev.eventType === 'FIRE') {
+            return <FireMarker key={ev.id} event={ev} onEventConverted={onAlertConverted} />;
+          }
+          return <EarthquakeMarker key={ev.id} event={ev} onEventConverted={onAlertConverted} />;
+        })}
 
         {/* Hospital Markers */}
         {filteredHospitals.map((h) => (

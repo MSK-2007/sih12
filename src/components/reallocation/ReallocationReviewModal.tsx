@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { ReallocationRecommendation } from '../../engines/reallocationEngine';
 import { AllocationComparisonPanel } from './AllocationComparisonPanel';
-import { ShieldCheck, AlertTriangle, X, ChevronDown, ChevronUp, Loader } from 'lucide-react';
+import { ShieldCheck, AlertTriangle, X, ChevronDown, ChevronUp, Loader, Zap } from 'lucide-react';
 
 interface Props {
   recommendation: ReallocationRecommendation;
@@ -95,9 +95,34 @@ export const ReallocationReviewModal: React.FC<Props> = ({
           </div>
         </div>
 
+        {/* Gemini AI Contextual Explanation */}
+        {recommendation.geminiSummary && (
+          <div className="p-4 rounded-xl bg-indigo-950/20 border border-indigo-500/30 text-xs space-y-2">
+            <div className="flex items-center gap-2 text-indigo-400 font-bold uppercase tracking-wider text-[11px]">
+              <Zap className="w-3.5 h-3.5" />
+              Gemini AI Decision Support Analysis
+            </div>
+            <p className="text-slate-200 font-medium">{recommendation.geminiSummary.summary}</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-[11px] pt-1">
+              <div className="bg-slate-900/60 p-2 rounded border border-slate-800">
+                <span className="text-slate-500 font-bold block">REASON</span>
+                <span className="text-slate-300">{recommendation.geminiSummary.reason}</span>
+              </div>
+              <div className="bg-slate-900/60 p-2 rounded border border-slate-800">
+                <span className="text-amber-400 font-bold block">POTENTIAL RISK</span>
+                <span className="text-slate-300">{recommendation.geminiSummary.risk}</span>
+              </div>
+            </div>
+            <div className="bg-emerald-950/20 p-2 rounded border border-emerald-500/30 text-emerald-300 text-[11px]">
+              <strong className="block font-bold">RECOMMENDED OPERATOR ACTION:</strong>
+              {recommendation.geminiSummary.operator_action}
+            </div>
+          </div>
+        )}
+
         {/* Explanation */}
         <div className="p-4 rounded-xl bg-amber-950/10 border border-amber-500/20 text-xs text-slate-200 leading-relaxed">
-          <span className="text-[11px] font-bold text-amber-400 uppercase tracking-wider block mb-1.5">Why This Reallocation?</span>
+          <span className="text-[11px] font-bold text-amber-400 uppercase tracking-wider block mb-1.5">Deterministic Engine Rationale</span>
           {recommendation.explanation}
         </div>
 
@@ -107,7 +132,7 @@ export const ReallocationReviewModal: React.FC<Props> = ({
             onClick={() => setShowDetails(!showDetails)}
             className="w-full flex items-center justify-between p-3.5 bg-slate-900/60 hover:bg-slate-900 text-xs font-semibold text-slate-300 transition"
           >
-            <span>Review Allocation Details (Before / After)</span>
+            <span>VIEW DETAILS (Global Allocation Matrix & Comparison)</span>
             {showDetails ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
           </button>
 
@@ -188,17 +213,17 @@ export const ReallocationReviewModal: React.FC<Props> = ({
             <>
               <button
                 onClick={() => onReject(recommendation.id)}
-                className="px-4 py-2 rounded-lg bg-red-900/40 hover:bg-red-900/60 text-red-300 border border-red-500/30 text-xs font-semibold transition"
+                className="px-4 py-2 rounded-lg bg-red-900/40 hover:bg-red-900/60 text-red-300 border border-red-500/30 text-xs font-semibold transition uppercase tracking-wider"
               >
-                Reject Recommendation
+                REJECT
               </button>
               <button
                 onClick={() => onConfirm(recommendation.id)}
                 disabled={confirming}
-                className="px-5 py-2 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold transition flex items-center gap-2 shadow-lg disabled:opacity-50"
+                className="px-5 py-2 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold transition flex items-center gap-2 shadow-lg disabled:opacity-50 uppercase tracking-wider"
               >
                 {confirming && <Loader className="w-4 h-4 animate-spin" />}
-                Confirm Reallocation
+                ACCEPT REALLOCATION
               </button>
             </>
           )}

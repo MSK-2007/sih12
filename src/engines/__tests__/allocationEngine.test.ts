@@ -1,3 +1,4 @@
+import { describe, it, expect } from 'vitest';
 import { allocationEngine } from '../allocationEngine';
 import { Incident } from '../../types/incident';
 import { Resource } from '../../types/resource';
@@ -122,3 +123,12 @@ export function runAllocationEngineTests() {
 
   return results;
 }
+
+describe('Allocation Engine (Comprehensive 12-Scenario Suite)', () => {
+  const results = runAllocationEngineTests();
+  for (const r of results) {
+    it(r.name, () => {
+      expect(r.passed, r.details).toBe(true);
+    });
+  }
+});

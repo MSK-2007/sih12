@@ -1,13 +1,14 @@
-export type UserRole = 'ADMIN' | 'CONTROL_ROOM_OPERATOR' | 'RESOURCE_OFFICER' | 'VIEWER';
+import type { UserRole } from '../security/rbac';
 
-export interface Profile {
+export type { UserRole };
+
+export interface UserProfile {
   id: string;
-  fullName: string;
   email: string;
+  fullName: string;
   role: UserRole;
   departmentId?: string;
   avatarUrl?: string;
   isActive: boolean;
   createdAt: string;
-  updatedAt: string;
 }

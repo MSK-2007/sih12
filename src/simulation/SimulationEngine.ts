@@ -1,16 +1,16 @@
 import { SimulationEvent, SimulationRun, SimulationMetrics, SimulationScenario } from '../types/simulation';
-import { createIncident, updateIncidentStatus } from '../services/incidents';
+import { createIncident, updateIncidentStatus, addIncidentUpdate, recalculateIncidentPriority, getIncidentById, updateIncident, getIncidents } from '../services/incidents';
 import { updateResourceStatus } from '../services/resources';
 import { analyzeAllocation } from '../services/allocation';
 import { analyzeDynamicReallocation } from '../services/reallocation';
 import { handleIncidentCreated, handleResourceStatusChanged } from '../services/notificationEvents';
-import { getIncidents } from '../services/incidents';
 import { getResources } from '../services/resources';
 import { supabase, isSupabaseConfigured } from '../services/supabase';
 import { evaluatePerformance, PerformanceEvaluationReport } from './performanceEvaluator';
 
 export class SimulationEngine {
   private activeRun: SimulationRun | null = null;
+  private activeDbRunUuid: string | null = null;
   private createdIncidentIds: string[] = [];
   private lastEvaluationReport: PerformanceEvaluationReport | null = null;
 
@@ -22,6 +22,10 @@ export class SimulationEngine {
     mode: 'AUTOMATIC' | 'MANUAL' | 'STEP' = 'AUTOMATIC'
   ): SimulationRun {
     const runId = `sim-run-${Date.now()}`;
+    this.activeDbRunUuid =
+      typeof globalThis.crypto?.randomUUID === 'function'
+        ? globalThis.crypto.randomUUID()
+        : null;
     const nowISO = new Date().toISOString();
 
     const events: SimulationEvent[] = scenario.events.map((e, idx) => ({
@@ -109,6 +113,36 @@ export class SimulationEngine {
 
             // 4. Trigger Reallocation Engine
             await analyzeDynamicReallocation(created.id);
+          }
+          break;
+        }
+
+        case 'ENVIRONMENTAL_EVENT_DETECTED': {
+          const firstIncId = this.createdIncidentIds[0];
+          if (firstIncId) {
+            await addIncidentUpdate(
+              firstIncId,
+              `REAL EXTERNAL DATA DETECTED: ${event.payload.address || 'IMD Weather Alert'} nearby. Priority recalculated.`,
+              'ANALYSING'
+            );
+            await recalculateIncidentPriority(firstIncId);
+            await analyzeDynamicReallocation(firstIncId);
+          }
+          break;
+        }
+
+        case 'ESCALATE_INCIDENT': {
+          const firstIncId = this.createdIncidentIds[0];
+          if (firstIncId) {
+            const inc = await getIncidentById(firstIncId);
+            if (inc) {
+              await updateIncident(firstIncId, {
+                peopleAffected: (inc.peopleAffected || 4) + 10,
+                injuryLevel: 'CRITICAL',
+              });
+              await recalculateIncidentPriority(firstIncId);
+              await analyzeDynamicReallocation(firstIncId);
+            }
           }
           break;
         }
@@ -213,11 +247,12 @@ export class SimulationEngine {
 
     this.activeRun.metrics = metrics;
 
-    // Persist simulation run to Supabase if configured
-    if (isSupabaseConfigured) {
+    // Persist simulation run to Supabase if configured (using UUID primary key + sim- run_key)
+    if (isSupabaseConfigured && this.activeDbRunUuid) {
       try {
         await supabase.from('simulation_runs').upsert({
-          id: this.activeRun.id,
+          id: this.activeDbRunUuid,
+          run_key: this.activeRun.id,
           name: this.activeRun.name,
           scenario_id: this.activeRun.scenarioId,
           status: this.activeRun.status,
@@ -250,6 +285,7 @@ export class SimulationEngine {
 
     this.createdIncidentIds = [];
     this.lastEvaluationReport = null;
+    this.activeDbRunUuid = null;
     this.activeRun = null;
     return true;
   }

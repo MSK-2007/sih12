@@ -1,5 +1,26 @@
 import { supabase, isSupabaseConfigured } from './supabase';
 
+export type SecurityAuditAction =
+  | 'AUTH_LOGIN'
+  | 'AUTH_LOGOUT'
+  | 'AUTH_SIGNUP'
+  | 'AUTH_SESSION_EXPIRED'
+  | 'ROLE_CHANGED'
+  | 'ACCESS_DENIED'
+  | 'INCIDENT_CREATED'
+  | 'INCIDENT_STATUS_CHANGED'
+  | 'PRIORITY_RECALCULATED'
+  | 'DISPATCH_CONFIRMED'
+  | 'ASSIGNMENT_ACCEPTED'
+  | 'ASSIGNMENT_DISPATCHED'
+  | 'ASSIGNMENT_IN_PROGRESS'
+  | 'ASSIGNMENT_COMPLETED'
+  | 'ASSIGNMENT_CANCELLED'
+  | 'ASSIGNMENT_REJECTED'
+  | 'REALLOCATION_APPROVED'
+  | 'REALLOCATION_REJECTED'
+  | 'ADMIN_ACTION';
+
 export interface AuditLog {
   id?: string;
   userId?: string;
@@ -11,10 +32,27 @@ export interface AuditLog {
   createdAt?: string;
 }
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 let localAuditLogsStore: AuditLog[] = [];
 
+async function resolveActorUuid(explicitUserId?: string): Promise<string | null> {
+  if (explicitUserId && UUID_REGEX.test(explicitUserId)) {
+    return explicitUserId;
+  }
+  if (isSupabaseConfigured) {
+    try {
+      const { data } = await supabase.auth.getUser();
+      const uid = data?.user?.id;
+      if (uid && UUID_REGEX.test(uid)) return uid;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
 /**
- * Creates an audit log entry for administrative or operator actions.
+ * Creates an audit log entry for security, administrative, or operator actions.
  */
 export async function createAuditLog(
   action: string,
@@ -24,15 +62,18 @@ export async function createAuditLog(
   newValue?: Record<string, any>,
   userId?: string
 ): Promise<AuditLog> {
+  const actorUuid = await resolveActorUuid(userId);
+  const now = new Date().toISOString();
+
   const log: AuditLog = {
-    id: `audit-${Date.now()}`,
-    userId,
+    id: `audit-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    userId: actorUuid || userId,
     action,
     entityType,
     entityId,
     oldValue,
     newValue,
-    createdAt: new Date().toISOString(),
+    createdAt: now,
   };
 
   if (isSupabaseConfigured) {
@@ -40,7 +81,7 @@ export async function createAuditLog(
       const { data, error } = await supabase
         .from('audit_logs')
         .insert({
-          user_id: userId || null,
+          user_id: actorUuid,
           action,
           entity_type: entityType,
           entity_id: entityId,
@@ -52,6 +93,7 @@ export async function createAuditLog(
 
       if (!error && data) {
         log.id = data.id;
+        log.userId = data.user_id;
         log.createdAt = data.created_at;
       }
     } catch (err) {
@@ -61,6 +103,24 @@ export async function createAuditLog(
 
   localAuditLogsStore.unshift(log);
   return log;
+}
+
+export async function logSecurityAuditEvent(params: {
+  action: SecurityAuditAction | string;
+  entityType: string;
+  entityId: string;
+  oldValue?: Record<string, any>;
+  newValue?: Record<string, any>;
+  userId?: string;
+}): Promise<AuditLog> {
+  return createAuditLog(
+    params.action,
+    params.entityType,
+    params.entityId,
+    params.oldValue,
+    params.newValue,
+    params.userId
+  );
 }
 
 /**

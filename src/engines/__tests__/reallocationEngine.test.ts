@@ -1,3 +1,4 @@
+import { describe, it, expect } from 'vitest';
 import { reallocationEngine, AssignmentSnapshot } from '../reallocationEngine';
 import { Incident } from '../../types/incident';
 import { Resource } from '../../types/resource';
@@ -168,3 +169,12 @@ export function runReallocationEngineTests() {
 
   return results;
 }
+
+describe('Dynamic Reallocation Engine (Comprehensive 14-Scenario Suite)', () => {
+  const results = runReallocationEngineTests();
+  for (const r of results) {
+    it(r.name, () => {
+      expect(r.passed, r.details).toBe(true);
+    });
+  }
+});

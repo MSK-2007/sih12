@@ -20,6 +20,9 @@ import { getActiveEnvironmentalAlerts } from '../services/environmentalAlertsSer
 import { MapPin, AlertCircle, RefreshCw, LayoutDashboard } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { KineticPageHeader } from '../components/kinetic/KineticPageHeader';
+import { ProviderHealthPanel } from '../components/common/ProviderHealthPanel';
+import { AiEventTimeline } from '../components/common/AiEventTimeline';
+import { useLiveStatus } from '../hooks/useLiveStatus';
 
 export const ControlCenterPage: React.FC = () => {
   const {
@@ -45,6 +48,7 @@ export const ControlCenterPage: React.FC = () => {
   const [selectedDrawerIncident, setSelectedDrawerIncident] = useState<Incident | null>(null);
   const [activeAlerts, setActiveAlerts] = useState<EnvironmentalAlert[]>([]);
   const [earthquakes, setEarthquakes] = useState<ExternalEvent[]>([]);
+  const { health, geminiStats, isChecking, runManualCheck } = useLiveStatus();
 
   useEffect(() => {
     getActiveEnvironmentalAlerts().then(setActiveAlerts).catch(() => {});
@@ -183,6 +187,21 @@ export const ControlCenterPage: React.FC = () => {
         </div>
         <div className="lg:col-span-1">
           <SystemStatusCard status={systemStatus} />
+        </div>
+      </div>
+
+      {/* ── Phase 24: AI Intelligence & System Health ───────────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        <div className="lg:col-span-1">
+          <ProviderHealthPanel
+            health={health}
+            geminiStats={geminiStats}
+            isChecking={isChecking}
+            onRefresh={runManualCheck}
+          />
+        </div>
+        <div className="lg:col-span-2">
+          <AiEventTimeline limit={20} compact />
         </div>
       </div>
 

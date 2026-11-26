@@ -47,6 +47,13 @@ export type ReallocationResultStatus =
   | 'NO_FEASIBLE_REALLOCATION'
   | 'PARTIAL_REALLOCATION';
 
+export interface ReallocationGeminiSummary {
+  summary: string;
+  reason: string;
+  operator_action: string;
+  risk: string;
+}
+
 export interface ReallocationRecommendation {
   id: string;
   triggerIncidentId: string;
@@ -62,6 +69,8 @@ export interface ReallocationRecommendation {
   affectedResources: { resourceId: string; resourceCode: string; fromIncidentId: string; toIncidentId: string }[];
   explanation: string;
   summaryMessage: string;
+  geminiSummary?: ReallocationGeminiSummary;
+  environmentalContext?: any;
   createdAt: string;
   engineVersion: string;
 }

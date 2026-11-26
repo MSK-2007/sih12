@@ -17,6 +17,22 @@ export interface ExternalEvent {
   createdAt?: string;
 }
 
+export interface ExternalEventAiAnalysis {
+  id?: string;
+  externalEventId?: string;
+  riskLevel: 'LOW' | 'MODERATE' | 'HIGH' | 'CRITICAL';
+  situationSummary: string;
+  potentialImpacts: string[];
+  recommendedResourceTypes: string[];
+  affectedAreaAssessment: string;
+  recommendedOperatorAction: 'MONITOR' | 'REVIEW' | 'CREATE_INCIDENT';
+  confidence: number;
+  reasoningSummary: string;
+  modelName: string;
+  analysisStatus: 'PENDING' | 'ANALYZING' | 'COMPLETED' | 'FAILED';
+  createdAt?: string;
+}
+
 export interface EarthquakeIngestionResult {
   success: boolean;
   events: ExternalEvent[];

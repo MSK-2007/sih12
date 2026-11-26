@@ -1,5 +1,5 @@
-import { supabase, isSupabaseConfigured } from './supabase';
-import { getIncidents, getIncidentById, updateIncidentStatus, addIncidentUpdate } from './incidents';
+import { supabase, isSupabaseConfigured, markBackendLive, markBackendOffline } from './supabase';
+import { getIncidents, getIncidentById, advanceIncidentToStatus, addIncidentUpdate } from './incidents';
 import { getResources, getResourceById, updateResourceStatus } from './resources';
 import { getRoute } from './routing';
 import {
@@ -9,9 +9,16 @@ import {
   CandidateResourceRoute,
 } from '../engines/reallocationEngine';
 import { PROTECTION_LEVEL_MAPPINGS } from '../engines/reallocationConfig';
-import { createAssignment, fetchAssignments } from './assignments';
+import {
+  createAssignment,
+  fetchAssignments,
+  getActiveAssignmentsForResource,
+  updateAssignmentStatus,
+} from './assignments';
+import { createAuditLog } from './auditLogs';
+import { assertAuthorizedActor } from './authGuard';
 
-let localReallocationStore: ReallocationRecommendation[] = [];
+let localReallocationStore: (ReallocationRecommendation & { reviewStatus?: 'PENDING' | 'APPROVED' | 'REJECTED' })[] = [];
 
 /**
  * Performs dynamic reallocation analysis across all active emergencies.
@@ -86,8 +93,50 @@ export async function analyzeDynamicReallocation(
     candidateRoutes
   );
 
+  // Fetch Gemini AI Explanation if dynamic reallocation is recommended
+  if (recommendation.status === 'REALLOCATION_RECOMMENDED' && recommendation.affectedResources.length > 0) {
+    const primaryAffRes = recommendation.affectedResources[0];
+    const donorInc = activeIncidents.find((i) => i.id === primaryAffRes.fromIncidentId);
+    const reassignedRes = allResources.find((r) => r.id === primaryAffRes.resourceId);
+
+    try {
+      if (isSupabaseConfigured) {
+        const { data: geminiRes, error } = await supabase.functions.invoke('explain-reallocation', {
+          body: {
+            recommendation,
+            triggerIncident: triggerInc,
+            donorIncident: donorInc,
+            resource: reassignedRes,
+          },
+        });
+
+        if (!error && geminiRes && geminiRes.summary) {
+          recommendation.geminiSummary = {
+            summary: geminiRes.summary,
+            reason: geminiRes.reason,
+            operator_action: geminiRes.operator_action,
+            risk: geminiRes.risk,
+          };
+        }
+      }
+    } catch (gErr) {
+      console.warn('[ReallocationService] Gemini explanation fetch fallback:', gErr);
+    }
+
+    if (!recommendation.geminiSummary) {
+      recommendation.geminiSummary = {
+        summary: `Incident ${triggerInc.incidentNumber} (${triggerInc.priorityLevel}) requires urgent resource allocation.`,
+        reason: `Reassigning ${primaryAffRes.resourceCode} yields +${recommendation.improvement} pts system quality improvement over static queueing.`,
+        operator_action: `Review and confirm reassignment of ${primaryAffRes.resourceCode} to ${triggerInc.incidentNumber}.`,
+        risk: donorInc
+          ? `Displaced incident ${donorInc.incidentNumber} response time will increase until replacement unit is available.`
+          : 'Minor adjustment to secondary unit coverage.',
+      };
+    }
+  }
+
   // Store recommendation locally & in Supabase
-  localReallocationStore.unshift(recommendation);
+  localReallocationStore.unshift({ ...recommendation, reviewStatus: 'PENDING' });
 
   if (isSupabaseConfigured) {
     try {
@@ -101,86 +150,208 @@ export async function analyzeDynamicReallocation(
         status: recommendation.status === 'REALLOCATION_RECOMMENDED' ? 'PENDING_OPERATOR_REVIEW' : 'COMPLETED',
         created_at: recommendation.createdAt,
       });
+
+      // Insert Audit Log entry
+      if (recommendation.affectedResources.length > 0) {
+        const aff = recommendation.affectedResources[0];
+        const donorInc = activeIncidents.find((i) => i.id === aff.fromIncidentId);
+
+        await supabase.from('reallocation_audit_logs').insert({
+          recommendation_id: recommendation.id,
+          incident_id: recommendation.triggerIncidentId,
+          resource_id: aff.resourceId,
+          previous_assignment: aff.fromIncidentId ? { incidentId: aff.fromIncidentId, incidentNumber: donorInc?.incidentNumber } : null,
+          proposed_assignment: { incidentId: aff.toIncidentId, incidentNumber: triggerInc.incidentNumber },
+          reason: recommendation.explanation,
+          priority_before: donorInc?.priorityScore || 50,
+          priority_after: triggerInc.priorityScore || 90,
+          eta_before: 15,
+          eta_after: recommendation.affectedIncidents.find((a) => a.incidentId === recommendation.triggerIncidentId)?.newEta || 5,
+          environmental_context: triggerInc.environmentalRiskScore ? { riskScore: triggerInc.environmentalRiskScore } : {},
+          gemini_summary: recommendation.geminiSummary || {},
+          operator_action: 'PENDING',
+          created_at: recommendation.createdAt,
+        });
+      }
     } catch (err) {
-      // Fail silently if table missing
+      console.warn('[ReallocationService] Audit log DB insertion notice:', err);
     }
   }
 
   return recommendation;
 }
 
-/**
- * Confirms operator approval for dynamic resource reallocation with atomic stale verification.
- */
-export async function confirmReallocation(
-  recommendationId: string
-): Promise<{ success: boolean; message: string }> {
-  const rec = localReallocationStore.find((r) => r.id === recommendationId);
-  if (!rec) {
-    return { success: false, message: 'Reallocation recommendation record not found.' };
-  }
+const activeReallocationLocks = new Set<string>();
 
-  // 1. Transaction Safety & Stale Check: Verify affected resources are still in expected status
-  for (const affRes of rec.affectedResources) {
-    const res = await getResourceById(affRes.resourceId);
-    if (!res || !res.isActive) {
-      return {
-        success: false,
-        message: 'This recommendation is no longer current because resource state changed. Please recalculate.',
+async function resolveRecommendationById(
+  recommendationId: string
+): Promise<(ReallocationRecommendation & { reviewStatus?: 'PENDING' | 'APPROVED' | 'REJECTED' }) | null> {
+  const localMatch = localReallocationStore.find((r) => r.id === recommendationId);
+  if (localMatch) return localMatch;
+
+  if (isSupabaseConfigured) {
+    const { data, error } = await supabase
+      .from('reallocation_events')
+      .select('id, recommendation_data, status, created_at')
+      .eq('id', recommendationId)
+      .single();
+
+    if (!error && data && data.recommendation_data) {
+      const rec = data.recommendation_data as ReallocationRecommendation;
+      const reviewStatus: 'PENDING' | 'APPROVED' | 'REJECTED' =
+        data.status === 'APPROVED' ? 'APPROVED' : data.status === 'REJECTED' ? 'REJECTED' : 'PENDING';
+      const hydrated = {
+        ...rec,
+        id: (data.id as string) || rec.id,
+        createdAt: (data.created_at as string) || rec.createdAt,
+        reviewStatus,
       };
+      localReallocationStore.unshift(hydrated);
+      return hydrated;
     }
   }
 
-  const now = new Date().toISOString();
+  return null;
+}
 
-  // 2. Perform Atomic Reassignment Steps
-  for (const affRes of rec.affectedResources) {
-    // Release donor assignment
-    if (affRes.fromIncidentId) {
-      await addIncidentUpdate(
-        affRes.fromIncidentId,
-        `Unit ${affRes.resourceCode} reassigned to critical incident ${rec.triggerIncidentNumber} via operator approved reallocation.`,
-        'IN_PROGRESS'
+/**
+ * Confirms operator approval for dynamic resource reallocation with concurrency locking,
+ * donor assignment release, and atomic stale verification.
+ */
+export async function confirmReallocation(
+  recommendationId: string,
+  options: { operatorApproved?: boolean; approvedByUserId?: string } = {}
+): Promise<{ success: boolean; message: string }> {
+  if (options.operatorApproved === false) {
+    return { success: false, message: 'Explicit human operator approval is required before reallocation.' };
+  }
+
+  let verifiedActorId = options.approvedByUserId;
+  try {
+    const actor = await assertAuthorizedActor('REALLOCATION_APPROVE', 'confirmReallocation');
+    if (actor) verifiedActorId = actor.userId;
+  } catch (authErr: unknown) {
+    return {
+      success: false,
+      message: authErr instanceof Error ? authErr.message : 'Unauthorized reallocation attempt.',
+    };
+  }
+
+  if (activeReallocationLocks.has(recommendationId)) {
+    return { success: false, message: 'Reallocation confirmation already in progress.' };
+  }
+  activeReallocationLocks.add(recommendationId);
+
+  try {
+    const rec = await resolveRecommendationById(recommendationId);
+    if (!rec) {
+      return { success: false, message: 'Reallocation recommendation record not found.' };
+    }
+
+    if (rec.reviewStatus === 'APPROVED') {
+      return { success: false, message: 'This reallocation recommendation has already been approved.' };
+    }
+    if (rec.reviewStatus === 'REJECTED') {
+      return { success: false, message: 'This reallocation recommendation was already rejected.' };
+    }
+
+    // 1. Stale Check: Verify affected resources are active and in expected operational state
+    for (const affRes of rec.affectedResources) {
+      const res = await getResourceById(affRes.resourceId);
+      if (!res || !res.isActive || res.status === 'OFFLINE') {
+        return {
+          success: false,
+          message: 'This recommendation is no longer current because resource state changed. Please recalculate.',
+        };
+      }
+      if (affRes.fromIncidentId && res.status !== 'ASSIGNED' && res.status !== 'BUSY' && res.status !== 'AVAILABLE') {
+        return {
+          success: false,
+          message: `Resource ${res.resourceCode} state (${res.status}) changed before confirmation.`,
+        };
+      }
+    }
+
+    const actorUserId = verifiedActorId;
+
+    const now = new Date().toISOString();
+
+    // 2. Perform Reassignment Steps: release donor assignment first, then create new assignment
+    for (const affRes of rec.affectedResources) {
+      const existingActive = await getActiveAssignmentsForResource(affRes.resourceId);
+      for (const oldAsgn of existingActive) {
+        await updateAssignmentStatus(
+          oldAsgn.id,
+          'CANCELLED',
+          `Reassigned to incident ${rec.triggerIncidentNumber} via operator-approved reallocation`
+        );
+      }
+
+      if (affRes.fromIncidentId) {
+        await addIncidentUpdate(
+          affRes.fromIncidentId,
+          `Unit ${affRes.resourceCode} reassigned to higher-priority incident ${rec.triggerIncidentNumber} via operator approved reallocation.`,
+          'IN_PROGRESS'
+        );
+      }
+
+      const proposedItem = rec.proposedAllocation.find(
+        (p) => p.resourceId === affRes.resourceId && p.incidentId === affRes.toIncidentId
+      );
+
+      // Ensure resource is AVAILABLE before assigning cleanly (or transition via updateAssignmentStatus release above)
+      const assignment = await createAssignment({
+        incidentId: affRes.toIncidentId,
+        resourceId: affRes.resourceId,
+        assignmentStatus: 'DISPATCHED',
+        distanceKm: proposedItem?.distanceKm ?? 3.5,
+        estimatedResponseMinutes: proposedItem?.etaMinutes ?? 7,
+        allocationScore: Math.min(100, Math.max(50, rec.proposedQuality)),
+        recommendationReason: `Reassigned via operator confirmed Dynamic Reallocation (+${rec.improvement} pts system quality gain).`,
+        assignedBy: actorUserId,
+      });
+
+      await updateResourceStatus(affRes.resourceId, 'ASSIGNED', assignment.id);
+
+      await advanceIncidentToStatus(
+        affRes.toIncidentId,
+        'DISPATCHED',
+        `Reassigned unit ${affRes.resourceCode} dispatched to scene`
       );
     }
 
-    // Create new assignment for trigger incident
-    const assignment = await createAssignment({
-      incidentId: affRes.toIncidentId,
-      resourceId: affRes.resourceId,
-      assignmentStatus: 'DISPATCHED',
-      distanceKm: 3.5,
-      estimatedResponseMinutes: 7,
-      allocationScore: 90,
-      recommendationReason: `Reassigned via operator confirmed Dynamic Reallocation (+${rec.improvement} pts system quality gain).`,
-      assignedBy: 'CONTROL_ROOM_OPERATOR',
-    });
+    rec.status = 'NO_REALLOCATION_REQUIRED';
+    rec.reviewStatus = 'APPROVED';
 
-    // Update resource status
-    await updateResourceStatus(affRes.resourceId, 'ASSIGNED', assignment.id);
+    if (isSupabaseConfigured) {
+      try {
+        await supabase
+          .from('reallocation_events')
+          .update({ status: 'APPROVED', reviewed_at: now })
+          .eq('id', recommendationId);
 
-    // Update trigger incident status
-    await updateIncidentStatus(affRes.toIncidentId, 'DISPATCHED', `Reassigned unit ${affRes.resourceCode} dispatched to scene`);
-  }
-
-  // Mark recommendation status
-  rec.status = 'NO_REALLOCATION_REQUIRED'; // Completed
-
-  if (isSupabaseConfigured) {
-    try {
-      await supabase
-        .from('reallocation_events')
-        .update({ status: 'APPROVED', reviewed_at: now })
-        .eq('id', recommendationId);
-    } catch (err) {
-      // Fail silently
+        await supabase
+          .from('reallocation_audit_logs')
+          .update({ operator_action: 'ACCEPTED', approved_at: now })
+          .eq('recommendation_id', recommendationId);
+      } catch (err) {
+        console.warn('[ReallocationService] DB update audit notice:', err);
+      }
     }
-  }
 
-  return {
-    success: true,
-    message: `Dynamic reallocation confirmed. ${rec.affectedResources.map((r) => r.resourceCode).join(', ')} reassigned successfully.`,
-  };
+    await createAuditLog('REALLOCATION_APPROVED', 'reallocation_event', recommendationId, undefined, {
+      triggerIncidentId: rec.triggerIncidentId,
+      affectedResources: rec.affectedResources,
+      improvement: rec.improvement,
+    }, actorUserId);
+
+    return {
+      success: true,
+      message: `Dynamic reallocation confirmed. ${rec.affectedResources.map((r) => r.resourceCode).join(', ')} reassigned successfully.`,
+    };
+  } finally {
+    activeReallocationLocks.delete(recommendationId);
+  }
 }
 
 /**
@@ -190,18 +361,34 @@ export async function rejectReallocation(
   recommendationId: string,
   reason?: string
 ): Promise<{ success: boolean; message: string }> {
-  const rec = localReallocationStore.find((r) => r.id === recommendationId);
+  let actorUserId: string | undefined;
+  try {
+    const actor = await assertAuthorizedActor('REALLOCATION_APPROVE', 'rejectReallocation');
+    actorUserId = actor?.userId;
+  } catch (authErr: unknown) {
+    return {
+      success: false,
+      message: authErr instanceof Error ? authErr.message : 'Unauthorized reallocation rejection.',
+    };
+  }
+
+  const rec = await resolveRecommendationById(recommendationId);
   if (rec) {
+    if (rec.reviewStatus === 'APPROVED') {
+      return { success: false, message: 'Cannot reject an already approved reallocation.' };
+    }
     rec.status = 'NO_FEASIBLE_REALLOCATION';
+    rec.reviewStatus = 'REJECTED';
   }
 
   const now = new Date().toISOString();
 
   if (rec && rec.triggerIncidentId) {
+    const inc = await getIncidentById(rec.triggerIncidentId);
     await addIncidentUpdate(
       rec.triggerIncidentId,
       `Reallocation recommendation rejected by control room operator. ${reason ? `Reason: ${reason}` : ''}`,
-      'AWAITING_DISPATCH'
+      inc?.status || 'AWAITING_DISPATCH'
     );
   }
 
@@ -211,10 +398,19 @@ export async function rejectReallocation(
         .from('reallocation_events')
         .update({ status: 'REJECTED', reviewed_at: now })
         .eq('id', recommendationId);
+
+      await supabase
+        .from('reallocation_audit_logs')
+        .update({ operator_action: 'REJECTED', rejection_reason: reason || 'Operator declined proposed change' })
+        .eq('recommendation_id', recommendationId);
     } catch (err) {
-      // Fail silently
+      console.warn('[ReallocationService] DB update audit notice:', err);
     }
   }
+
+  await createAuditLog('REALLOCATION_REJECTED', 'reallocation_event', recommendationId, undefined, {
+    reason: reason || 'Operator declined proposed change',
+  }, actorUserId);
 
   return {
     success: true,
@@ -223,8 +419,42 @@ export async function rejectReallocation(
 }
 
 /**
- * Returns historical dynamic reallocation events.
+ * Returns historical dynamic reallocation events from Supabase when available,
+ * merged with any in-session records.
  */
 export async function getReallocationHistory(): Promise<ReallocationRecommendation[]> {
+  if (isSupabaseConfigured) {
+    try {
+      const { data, error } = await supabase
+        .from('reallocation_events')
+        .select('id, recommendation_data, status, created_at')
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+      if (!error && data) {
+        markBackendLive();
+        const dbItems = data
+          .map((row: Record<string, unknown>) => {
+            const rec = row.recommendation_data as ReallocationRecommendation | undefined;
+            if (!rec) return null;
+            return {
+              ...rec,
+              id: (row.id as string) || rec.id,
+              createdAt: (row.created_at as string) || rec.createdAt,
+            };
+          })
+          .filter((item): item is ReallocationRecommendation => item !== null);
+
+        if (dbItems.length > 0) {
+          return dbItems;
+        }
+      } else if (error) {
+        markBackendOffline(error.message);
+      }
+    } catch (err: unknown) {
+      markBackendOffline(err instanceof Error ? err.message : 'Failed to load reallocation history');
+    }
+  }
+
   return [...localReallocationStore];
 }

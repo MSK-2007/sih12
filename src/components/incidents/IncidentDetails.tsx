@@ -8,6 +8,7 @@ import { useIncidentUpdates } from '../../hooks/useIncidentUpdates';
 import { priorityEngine } from '../../engines/priorityEngine';
 import { recalculateIncidentPriority } from '../../services/incidents';
 import { ResourceRecommendations } from '../allocation/ResourceRecommendations';
+import { EnvironmentalIntelligenceCard } from './EnvironmentalIntelligenceCard';
 import { MapPin, Users, Clock, Activity, ArrowLeft, RefreshCw, Zap, Info } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
@@ -187,14 +188,20 @@ export const IncidentDetails: React.FC<Props> = ({ incident, onStatusChange }) =
             </div>
           </div>
 
+          {/* Environmental & External Event Intelligence */}
+          <EnvironmentalIntelligenceCard
+            incident={incident}
+            onContextUpdated={() => onStatusChange(incident.status)}
+          />
+
           {/* AI Priority Intelligence Analysis */}
           {(() => {
             const analysis = priorityEngine.calculatePriority({
               emergency_type: incident.emergencyType,
               people_affected: incident.peopleAffected,
               injury_level: incident.injuryLevel,
-              severity: incident.priorityScore || 50,
               reported_at: incident.reportedAt,
+              environmentalRiskScore: incident.environmentalRiskScore ?? 0,
             });
 
             return (
@@ -229,12 +236,11 @@ export const IncidentDetails: React.FC<Props> = ({ incident, onStatusChange }) =
                   </div>
                   <div className="bg-slate-900/80 p-4 rounded-xl border border-slate-800 text-center">
                     <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">Classification</span>
-                    <span className={`inline-block mt-2 font-mono text-sm font-bold px-3 py-1 rounded border ${
-                      analysis.level === 'CRITICAL' ? 'bg-red-500/20 text-red-400 border-red-500/30 animate-pulse' :
-                      analysis.level === 'HIGH' ? 'bg-orange-500/20 text-orange-400 border-orange-500/30' :
-                      analysis.level === 'MEDIUM' ? 'bg-amber-500/20 text-amber-400 border-amber-500/30' :
-                      'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
-                    }`}>
+                    <span className={`inline-block mt-2 font-mono text-sm font-bold px-3 py-1 rounded border ${analysis.level === 'CRITICAL' ? 'bg-red-500/20 text-red-400 border-red-500/30 animate-pulse' :
+                        analysis.level === 'HIGH' ? 'bg-orange-500/20 text-orange-400 border-orange-500/30' :
+                          analysis.level === 'MEDIUM' ? 'bg-amber-500/20 text-amber-400 border-amber-500/30' :
+                            'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+                      }`}>
                       {analysis.level}
                     </span>
                   </div>
@@ -256,9 +262,8 @@ export const IncidentDetails: React.FC<Props> = ({ incident, onStatusChange }) =
                         </div>
                         <div className="h-2 w-full bg-slate-900 rounded-full overflow-hidden border border-slate-800">
                           <div
-                            className={`h-full rounded-full transition-all duration-500 ${
-                              f.normalizedScore >= 80 ? 'bg-red-500' : f.normalizedScore >= 60 ? 'bg-orange-500' : 'bg-emerald-500'
-                            }`}
+                            className={`h-full rounded-full transition-all duration-500 ${f.normalizedScore >= 80 ? 'bg-red-500' : f.normalizedScore >= 60 ? 'bg-orange-500' : 'bg-emerald-500'
+                              }`}
                             style={{ width: `${f.normalizedScore}%` }}
                           />
                         </div>

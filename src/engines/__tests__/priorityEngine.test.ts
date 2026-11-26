@@ -1,3 +1,4 @@
+import { describe, it, expect } from 'vitest';
 import { priorityEngine } from '../priorityEngine';
 
 /**
@@ -91,3 +92,12 @@ export function runPriorityEngineTests() {
 
   return results;
 }
+
+describe('Priority Engine (Comprehensive 10-Scenario Suite)', () => {
+  const results = runPriorityEngineTests();
+  for (const r of results) {
+    it(r.name, () => {
+      expect(r.passed, r.details).toBe(true);
+    });
+  }
+});

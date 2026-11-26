@@ -2,6 +2,7 @@ import { supabase, isSupabaseConfigured } from './supabase';
 import { Incident } from '../types/incident';
 import { determineRequiredResources } from '../engines/resourceRequirementEngine';
 import { priorityEngine } from '../engines/priorityEngine';
+import { DEFAULT_GEMINI_MODEL } from '../config/ai';
 
 export interface IncidentAiAnalysis {
   id?: string;
@@ -40,7 +41,7 @@ export async function analyzeIncidentWithAI(incident: Incident): Promise<Inciden
           requiredResources: Array.isArray(data.required_resources) ? data.required_resources : ['AMBULANCE'],
           riskFactors: Array.isArray(data.risk_factors) ? data.risk_factors : ['Trauma severity', 'Access bottleneck'],
           reasons: Array.isArray(data.reasons) ? data.reasons : ['Gemini multi-factor situational analysis'],
-          modelName: data.model_name || 'gemini-1.5-flash',
+          modelName: data.model_name || DEFAULT_GEMINI_MODEL,
         };
       }
     } catch (err) {
@@ -61,8 +62,8 @@ export async function analyzeIncidentWithAI(incident: Incident): Promise<Inciden
       emergency_type: incident.emergencyType,
       people_affected: incident.peopleAffected,
       injury_level: incident.injuryLevel,
-      severity: incident.priorityScore || 50,
       reported_at: incident.reportedAt,
+      environmentalRiskScore: incident.environmentalRiskScore ?? 0,
     });
 
     analysis = {

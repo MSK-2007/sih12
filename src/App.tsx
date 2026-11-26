@@ -1,13 +1,17 @@
 import { useState } from 'react';
-import { BrowserRouter, Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
-import { Shield, MapPin, Truck, BarChart3, Play, Radio, RefreshCw, LayoutDashboard, Bell, Zap, LogIn, LogOut, UserCheck } from 'lucide-react';
+import { BrowserRouter, Routes, Route, Link, useLocation, useNavigate, Navigate } from 'react-router-dom';
+import { Shield, MapPin, Truck, BarChart3, Play, Radio, RefreshCw, LayoutDashboard, Bell, Zap, LogIn, LogOut, UserCheck, Activity, Bot } from 'lucide-react';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { ProtectedRoute } from './components/auth/ProtectedRoute';
+import { canAccessRoute } from './security/rbac';
+import { OperationalLocationProvider } from './context/OperationalLocationContext';
 import { ReallocationMonitor } from './components/reallocation/ReallocationMonitor';
 import { ReallocationHistoryPage } from './pages/ReallocationHistoryPage';
 import ControlCenterPage from './pages/ControlCenterPage';
 import { AlertsHistoryPage } from './pages/AlertsHistoryPage';
 import SimulationDashboardPage from './pages/SimulationDashboardPage';
 import AnalyticsDashboardPage from './pages/AnalyticsDashboardPage';
+import SystemHealthPage from './pages/SystemHealthPage';
 import { NotificationToast } from './components/notifications/NotificationToast';
 import { useNotifications } from './hooks/useNotifications';
 import { useNotificationRealtime } from './hooks/useNotificationRealtime';
@@ -20,6 +24,10 @@ import ResourceDetailsPage from './pages/ResourceDetailsPage';
 import EditResourcePage from './pages/EditResourcePage';
 import MapPage from './pages/MapPage';
 import { DemoBanner } from './components/common/DemoBanner';
+import { LiveStatusBadge } from './components/common/LiveStatusBadge';
+import { LocationSelector } from './components/common/LocationSelector';
+import { AiAssistantPanel } from './components/common/AiAssistantPanel';
+import { useLiveStatus } from './hooks/useLiveStatus';
 import KineticLandingPage from './pages/KineticLandingPage';
 import DriverPanelPage from './pages/DriverPanelPage';
 import { LoginPage } from './pages/LoginPage';
@@ -36,13 +44,19 @@ const NAV_ITEMS = [
   { to: '/reallocation', label: 'Reallocation', icon: RefreshCw, color: 'text-purple-400', exact: false },
   { to: '/simulation', label: 'Simulation', icon: Play, color: 'text-slate-400', exact: false },
   { to: '/analytics', label: 'Analytics', icon: BarChart3, color: 'text-blue-400', exact: false },
+  { to: '/system-health', label: 'Health', icon: Activity, color: 'text-teal-400', exact: false },
 ];
 
 function NavBar() {
   const location = useLocation();
+  const { profile } = useAuth();
+  const visibleItems = NAV_ITEMS.filter(
+    (item) => item.to === '/kinetic' || (profile && canAccessRoute(profile.role, item.to))
+  );
+
   return (
     <nav className="flex items-center gap-1 bg-black/90 p-1.5 rounded-full border border-white/20 overflow-x-auto max-w-full custom-scrollbar">
-      {NAV_ITEMS.map(({ to, label, icon: Icon, color, exact }) => {
+      {visibleItems.map(({ to, label, icon: Icon, color, exact }) => {
         const isActive = exact ? location.pathname === to : location.pathname.startsWith(to) && to !== '/';
         return (
           <Link
@@ -104,15 +118,23 @@ function UserHeaderControls() {
 
 function AppContent() {
   const [activeToast, setActiveToast] = useState<any>(null);
+  const [isAiAssistantOpen, setIsAiAssistantOpen] = useState(false);
+  const { user, session, profile, hasPermission } = useAuth();
+  const isAuthenticated = Boolean(user && session && profile);
+  const canUseAiAssistant = isAuthenticated && hasPermission('AI_ASSISTANT_USE');
   const { refresh } = useNotifications();
   const location = useLocation();
+  const navigate = useNavigate();
+  const { health, getProviderByKey } = useLiveStatus();
 
   const handleNewNotification = (notif: any) => {
+    if (!isAuthenticated) return;
     setActiveToast(notif);
     refresh();
   };
 
   useNotificationRealtime(handleNewNotification);
+  const geminiProvider = getProviderByKey('gemini');
 
   const isLanding = location.pathname === '/' || location.pathname === '/kinetic' || location.pathname === '/login';
 
@@ -145,7 +167,27 @@ function AppContent() {
 
           <NavBar />
 
-          <div className="hidden lg:flex items-center gap-2">
+          <div className="hidden lg:flex items-center gap-3">
+            <LiveStatusBadge
+              overallStatus={health.overallStatus}
+              geminiOnline={geminiProvider?.status === 'ONLINE'}
+              onClick={() => navigate('/system-health')}
+            />
+            <LocationSelector />
+            {canUseAiAssistant && (
+              <button
+                onClick={() => setIsAiAssistantOpen(!isAiAssistantOpen)}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-full border transition ${
+                  isAiAssistantOpen
+                    ? 'bg-purple-500/20 border-purple-500/40 text-purple-400'
+                    : 'bg-white/5 border-white/15 text-slate-400 hover:text-purple-400 hover:border-purple-500/30'
+                }`}
+                title="AI Assistant"
+              >
+                <Bot className="w-3.5 h-3.5" />
+                <span className="font-space text-[10px] font-bold uppercase">AI</span>
+              </button>
+            )}
             <UserHeaderControls />
           </div>
         </header>
@@ -158,28 +200,32 @@ function AppContent() {
             <Route path="/" element={<KineticLandingPage />} />
             <Route path="/kinetic" element={<KineticLandingPage />} />
             <Route path="/login" element={<LoginPage />} />
-            <Route path="/dashboard" element={<Navigate to="/control-center" replace />} />
-            <Route path="/control-center" element={<ControlCenterPage />} />
-            <Route path="/incidents" element={<IncidentsPage />} />
-            <Route path="/incidents/create" element={<CreateIncidentPage />} />
-            <Route path="/incidents/:id" element={<IncidentDetailsPage />} />
-            <Route path="/resources" element={<ResourcesPage />} />
-            <Route path="/resources/create" element={<CreateResourcePage />} />
-            <Route path="/resources/:id" element={<ResourceDetailsPage />} />
-            <Route path="/resources/:id/edit" element={<EditResourcePage />} />
-            <Route path="/map" element={<MapPage />} />
-            <Route path="/driver" element={<DriverPanelPage />} />
-            <Route path="/alerts" element={<AlertsHistoryPage />} />
-            <Route path="/reallocation" element={<ReallocationHistoryPage />} />
-            <Route path="/simulation" element={<SimulationDashboardPage />} />
-            <Route path="/analytics" element={<AnalyticsDashboardPage />} />
-            <Route path="*" element={<ControlCenterPage />} />
+            <Route path="/dashboard" element={<ProtectedRoute allowedRoles={['ADMIN', 'DISPATCHER']}><Navigate to="/control-center" replace /></ProtectedRoute>} />
+            <Route path="/control-center" element={<ProtectedRoute allowedRoles={['ADMIN', 'DISPATCHER']}><ControlCenterPage /></ProtectedRoute>} />
+            <Route path="/incidents" element={<ProtectedRoute allowedRoles={['ADMIN', 'DISPATCHER', 'FIELD_RESPONDER']}><IncidentsPage /></ProtectedRoute>} />
+            <Route path="/incidents/create" element={<ProtectedRoute allowedRoles={['ADMIN', 'DISPATCHER']}><CreateIncidentPage /></ProtectedRoute>} />
+            <Route path="/incidents/:id" element={<ProtectedRoute allowedRoles={['ADMIN', 'DISPATCHER', 'FIELD_RESPONDER']}><IncidentDetailsPage /></ProtectedRoute>} />
+            <Route path="/resources" element={<ProtectedRoute allowedRoles={['ADMIN', 'DISPATCHER']}><ResourcesPage /></ProtectedRoute>} />
+            <Route path="/resources/create" element={<ProtectedRoute allowedRoles={['ADMIN', 'DISPATCHER']}><CreateResourcePage /></ProtectedRoute>} />
+            <Route path="/resources/:id" element={<ProtectedRoute allowedRoles={['ADMIN', 'DISPATCHER']}><ResourceDetailsPage /></ProtectedRoute>} />
+            <Route path="/resources/:id/edit" element={<ProtectedRoute allowedRoles={['ADMIN', 'DISPATCHER']}><EditResourcePage /></ProtectedRoute>} />
+            <Route path="/map" element={<ProtectedRoute allowedRoles={['ADMIN', 'DISPATCHER', 'FIELD_RESPONDER']}><MapPage /></ProtectedRoute>} />
+            <Route path="/driver" element={<ProtectedRoute allowedRoles={['ADMIN', 'DISPATCHER', 'FIELD_RESPONDER']}><DriverPanelPage /></ProtectedRoute>} />
+            <Route path="/alerts" element={<ProtectedRoute allowedRoles={['ADMIN', 'DISPATCHER', 'FIELD_RESPONDER']}><AlertsHistoryPage /></ProtectedRoute>} />
+            <Route path="/reallocation" element={<ProtectedRoute allowedRoles={['ADMIN', 'DISPATCHER']}><ReallocationHistoryPage /></ProtectedRoute>} />
+            <Route path="/simulation" element={<ProtectedRoute allowedRoles={['ADMIN', 'DISPATCHER']}><SimulationDashboardPage /></ProtectedRoute>} />
+            <Route path="/analytics" element={<ProtectedRoute allowedRoles={['ADMIN', 'DISPATCHER']}><AnalyticsDashboardPage /></ProtectedRoute>} />
+            <Route path="/system-health" element={<ProtectedRoute allowedRoles={['ADMIN', 'DISPATCHER']}><SystemHealthPage /></ProtectedRoute>} />
+            <Route path="*" element={<ProtectedRoute allowedRoles={['ADMIN', 'DISPATCHER']}><ControlCenterPage /></ProtectedRoute>} />
           </Routes>
         </ReallocationMonitor>
       </main>
 
       {/* Live Operational Toast Alerts */}
-      <NotificationToast notification={activeToast} onDismiss={() => setActiveToast(null)} />
+      {isAuthenticated && <NotificationToast notification={activeToast} onDismiss={() => setActiveToast(null)} />}
+
+      {/* Gemini AI Conversational Assistant */}
+      {canUseAiAssistant && <AiAssistantPanel isOpen={isAiAssistantOpen} onClose={() => setIsAiAssistantOpen(false)} />}
     </div>
   );
 }
@@ -188,7 +234,9 @@ export function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <AppContent />
+        <OperationalLocationProvider>
+          <AppContent />
+        </OperationalLocationProvider>
       </AuthProvider>
     </BrowserRouter>
   );

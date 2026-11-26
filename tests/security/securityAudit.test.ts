@@ -1,41 +1,51 @@
 import { describe, it, expect } from 'vitest';
-import { sanitizeInput, maskErrorMessage } from '../helpers/testUtils';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { sanitizeInput, maskErrorMessage, isValidCoordinates } from '../helpers/testUtils';
+import { priorityEngine } from '../../src/engines/priorityEngine';
+import { isValidStatusTransition } from '../../src/types/incident';
+import { validateResourceStatusTransition } from '../../src/types/resource';
+import { calculateEnvironmentalRiskScore } from '../../src/types/externalData';
 
-type Role = 'ADMIN' | 'OPERATOR' | 'DISPATCHER' | 'VIEWER';
-
-const PERMISSIONS: Record<Role, string[]> = {
-  ADMIN: ['CREATE_INCIDENT', 'DISPATCH', 'REALLOCATE', 'MANAGE_RESOURCES', 'VIEW_ANALYTICS'],
-  OPERATOR: ['CREATE_INCIDENT', 'DISPATCH', 'REALLOCATE', 'VIEW_ANALYTICS'],
-  DISPATCHER: ['DISPATCH', 'VIEW_ANALYTICS'],
-  VIEWER: ['VIEW_ANALYTICS'],
-};
-
-function hasPermission(role: Role, action: string): boolean {
-  const allowed = PERMISSIONS[role] || [];
-  return allowed.includes(action);
-}
-
-describe('Security Audit & RBAC Tests', () => {
-  it('should enforce role-based permissions correctly', () => {
-    expect(hasPermission('ADMIN', 'MANAGE_RESOURCES')).toBe(true);
-    expect(hasPermission('OPERATOR', 'DISPATCH')).toBe(true);
-    expect(hasPermission('DISPATCHER', 'MANAGE_RESOURCES')).toBe(false);
-    expect(hasPermission('VIEWER', 'CREATE_INCIDENT')).toBe(false);
-  });
-
-  it('should sanitize raw string inputs against script tags', () => {
-    const rawInput = '<script>alert("hack")</script> Main Street Collision';
+describe('Security, Validation & Boundary Guard Tests (Actual App Modules)', () => {
+  it('should sanitize HTML/script tags and mask Postgres error details', () => {
+    const rawInput = '<script>alert("xss")</script> Main Street Collision';
     const cleaned = sanitizeInput(rawInput);
     expect(cleaned).not.toContain('<script>');
     expect(cleaned).toContain('Main Street Collision');
+
+    const rawError = 'PostgrestError: relation "incidents" does not exist at PG::SyntaxError';
+    const masked = maskErrorMessage(rawError);
+    expect(masked).not.toContain('PostgrestError');
+    expect(masked).toBe('Unable to access database service. Please try again.');
   });
 
-  it('should mask database internal stack traces in user-facing error output', () => {
-    const rawError = 'PostgrestError: relation "secret_table" does not exist at PG::SyntaxError';
-    const masked = maskErrorMessage(rawError);
+  it('should clamp out-of-range inputs safely in priorityEngine and environmental risk scoring', () => {
+    const clamped = priorityEngine.calculatePriority({
+      severity: 9999,
+      people_affected: -50,
+      environmentalRiskScore: 500,
+    });
+    expect(clamped.score).toBeGreaterThanOrEqual(0);
+    expect(clamped.score).toBeLessThanOrEqual(100);
+    expect(Number.isNaN(clamped.score)).toBe(false);
 
-    expect(masked).not.toContain('PostgrestError');
-    expect(masked).not.toContain('secret_table');
-    expect(masked).toBe('Unable to access database service. Please try again.');
+    const envRes = calculateEnvironmentalRiskScore(12.9716, 77.5946, [], 50);
+    expect(envRes.score).toBe(0);
+    expect(envRes.relevantAlerts).toEqual([]);
+  });
+
+  it('should enforce strict incident and resource status transition state machines', () => {
+    expect(isValidStatusTransition('CLOSED', 'REPORTED')).toBe(false);
+    expect(isValidStatusTransition('RESOLVED', 'IN_PROGRESS')).toBe(false);
+    expect(validateResourceStatusTransition('OFFLINE', 'BUSY').valid).toBe(false);
+    expect(isValidCoordinates(12.9716, 77.5946)).toBe(true);
+    expect(isValidCoordinates(120, 77.5946)).toBe(false);
+  });
+
+  it('should not contain hardcoded service_role secrets or Gemini keys in client source', () => {
+    const supabaseSrc = readFileSync(resolve(process.cwd(), 'src/services/supabase.ts'), 'utf8');
+    expect(supabaseSrc).not.toMatch(/service_role/i);
+    expect(supabaseSrc).not.toMatch(/AIza[0-9A-Za-z_-]{20,}/);
   });
 });
